@@ -160,6 +160,7 @@ public:
 	void setCurrentDirectory(AsciiString dir) {m_currentDirectory = dir;};
 
 	Tool *getCurTool() { return m_curTool; }
+	PointerTool *getPointerTool() { return &m_pointerTool; }
 
 	/// Check to see if any keyboard overrides are changing the current tool.
 	void updateCurTool(Bool forceHand);

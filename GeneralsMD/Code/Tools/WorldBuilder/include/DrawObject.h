@@ -184,6 +184,8 @@ protected:
 	void updateVBWithTestArtHighlight(MapObject *pMapObj, CameraClass* camera);
   void updateVBWithSoundRanges(MapObject *pMapObj, CameraClass* camera);
 	bool worldToScreen(const Coord3D *w, ICoord2D *s, CameraClass* camera);
+	void renderGizmo(CameraClass* camera);
+	void renderCameraAxesOverlay(CameraClass* camera);
 
 };
 

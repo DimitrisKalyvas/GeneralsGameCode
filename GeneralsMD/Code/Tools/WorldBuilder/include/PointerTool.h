@@ -27,6 +27,21 @@ class WorldHeightMapEdit;
 #include "../../GameEngine/Include/Common/MapObject.h"
 
 class ModifyObjectUndoable;
+
+enum GizmoComponent {
+	GIZMO_NONE = 0,       ///< No gizmo component
+	GIZMO_MOVE_X,         ///< X-axis translation handle (red)
+	GIZMO_MOVE_Y,         ///< Y-axis translation handle (green)
+	GIZMO_MOVE_Z,         ///< Z-axis translation handle (blue)
+	GIZMO_MOVE_XY,        ///< XY plane translation handle
+	GIZMO_ROTATE_Z,       ///< Z-axis rotation ring (yaw)
+};
+
+enum GizmoMode {
+	GIZMO_MODE_TRANSLATE,
+	GIZMO_MODE_ROTATE,
+};
+
 /*************************************************************************/
 /**                             PointerTool
 	 Does the select/move tool operation.
@@ -53,8 +68,27 @@ protected:
 	Bool m_mouseUpMove;///< True if we are over the "move" hotspot.
 	HCURSOR m_moveCursor;
 
+	GizmoMode m_gizmoMode;
+	GizmoComponent m_hoveredGizmoComponent;
+	GizmoComponent m_activeGizmoComponent;
+	Coord3D m_gizmoCenter;
+	Real m_gizmoScale;
+	Real m_gizmoAngle;
+	Coord3D m_gizmoDragStartPos;
+	Real m_gizmoDragStartAngle;
+	Real m_gizmoRotationDelta;
+	Real m_gizmoStartAngleForDisplay;
+	Bool m_gizmoVisible;
+	Bool m_gizmoRotating;
+
 protected:
 	void checkForPropertiesPanel(void);
+	
+	void updateGizmoCenter(void);
+	void updateGizmoScale(WbView* pView);
+	GizmoComponent pickGizmoComponent(CPoint viewPt, WbView* pView);
+	void handleGizmoTranslation(GizmoComponent axis, CPoint viewPt, WbView* pView, CWorldBuilderDoc* pDoc);
+	void handleGizmoRotation(CPoint viewPt, WbView* pView, CWorldBuilderDoc* pDoc);
 
 public:
 	PointerTool(void);
@@ -73,4 +107,15 @@ public:
 public:
 	static void clearSelection(void); ///< Clears the selected objects selected flags.
 	static Bool allowPick(MapObject* pMapObj, WbView* pView);
+	
+	Bool isGizmoVisible(void) const { return m_gizmoVisible; }
+	const Coord3D& getGizmoCenter(void) const { return m_gizmoCenter; }
+	Real getGizmoScale(void) const { return m_gizmoScale; }
+	Real getGizmoAngle(void) const { return m_gizmoAngle; }
+	GizmoComponent getHoveredGizmoComponent(void) const { return m_hoveredGizmoComponent; }
+	GizmoMode getGizmoMode(void) const { return m_gizmoMode; }
+	Bool isGizmoRotating(void) const { return m_gizmoRotating; }
+	Real getGizmoRotationDelta(void) const { return m_gizmoRotationDelta; }
+	Real getGizmoStartAngle(void) const { return m_gizmoStartAngleForDisplay; }
+	void setGizmoMode(GizmoMode mode);
 };

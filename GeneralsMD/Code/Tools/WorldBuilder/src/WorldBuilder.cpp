@@ -571,6 +571,10 @@ void CWorldBuilderApp::updateCurTool(Bool forceHand)
 			m_curTool = &m_eyedropperTool;
 		} else if (0x8000 & ::GetAsyncKeyState('W')) {
 			m_curTool = &m_pointerTool;
+			m_pointerTool.setGizmoMode(GIZMO_MODE_TRANSLATE);
+		} else if (0x8000 & ::GetAsyncKeyState('E')) {
+			m_curTool = &m_pointerTool;
+			m_pointerTool.setGizmoMode(GIZMO_MODE_ROTATE);
 		} else {
 			m_curTool = m_selTool;
 		}
