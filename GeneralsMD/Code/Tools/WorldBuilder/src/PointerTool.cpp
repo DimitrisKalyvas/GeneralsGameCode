@@ -48,6 +48,16 @@ Bool PointerTool::s_lockZAxis = true;
 //
 static void helper_pickAllWaypointsInPath( Int sourceID, CWorldBuilderDoc *pDoc, const Int numWaypointLinks, std::vector<Int>& alreadyTouched );
 
+/// Helper to invalidate all selected map objects in view
+static void invalSelectedObjectsInView(WbView* pView)
+{
+	for (MapObject *obj = MapObject::getFirstMapObject(); obj; obj = obj->getNext()) {
+		if (obj->isSelected()) {
+			pView->invalObjectInView(obj);
+		}
+	}
+}
+
 static void pickAllWaypointsInPath( Int sourceID, Bool select )
 {
 	std::vector<Int> alreadyTouched;
@@ -100,41 +110,32 @@ PointerTool::PointerTool(void) :
 	m_gizmoMode(GIZMO_MODE_TRANSLATE),
 	m_hoveredGizmoComponent(GIZMO_NONE),
 	m_activeGizmoComponent(GIZMO_NONE),
+	m_gizmoCenter({0, 0, 0}),
 	m_gizmoScale(1.0f),
 	m_gizmoAngle(0),
-	m_gizmoVisible(false),
-	m_gizmoRotating(false),
-	m_gizmoIsPolygon(false),
-	m_gizmoPolygonStartCenter({0, 0, 0}),
+	m_gizmoDragStartPos({0, 0, 0}),
 	m_gizmoDragStartAngle(0),
 	m_gizmoDragStartZ(0),
 	m_gizmoPrevMouseAngle(0),
 	m_gizmoAccumulatedDelta(0),
 	m_gizmoRotationDelta(0),
 	m_gizmoStartAngleForDisplay(0),
-	m_gizmoObjectStartAngle(0)
+	m_gizmoObjectStartAngle(0),
+	m_gizmoVisible(false),
+	m_gizmoRotating(false),
+	m_gizmoIsPolygon(false),
+	m_gizmoPolygonStartCenter({0, 0, 0})
 {
 	m_toolID = ID_POINTER_TOOL;
 	m_cursorID = IDC_POINTER;
-	
-	m_gizmoCenter.x = 0;
-	m_gizmoCenter.y = 0;
-	m_gizmoCenter.z = 0;
-	m_gizmoDragStartPos.x = 0;
-	m_gizmoDragStartPos.y = 0;
-	m_gizmoDragStartPos.z = 0;
 }
 
 /// Destructor
 PointerTool::~PointerTool(void)
 {
-	REF_PTR_RELEASE(m_modifyUndoable); // belongs to pDoc now.
-	if (m_rotateCursor) {
-		::DestroyCursor(m_rotateCursor);
-	}
-	if (m_moveCursor) {
-		::DestroyCursor(m_moveCursor);
-	}
+	REF_PTR_RELEASE(m_modifyUndoable);
+	if (m_rotateCursor) ::DestroyCursor(m_rotateCursor);
+	if (m_moveCursor) ::DestroyCursor(m_moveCursor);
 }
 
 /// See if a single obj is selected that has properties.
@@ -171,29 +172,24 @@ void PointerTool::checkForPropertiesPanel(void)
 }
 
 /// Clear the selection..
-void PointerTool::clearSelection(void) ///< Clears the selected objects selected flags.
+void PointerTool::clearSelection(void)
 {
-	// Clear selection.
-	MapObject *pObj = MapObject::getFirstMapObject();
-	while (pObj) {
-		if (pObj->isSelected()) {
-			pObj->setSelected(false);
-		}
-		pObj = pObj->getNext();
+	// Clear map object selection
+	for (MapObject *pObj = MapObject::getFirstMapObject(); pObj; pObj = pObj->getNext()) {
+		pObj->setSelected(false);
 	}
-	// Clear selected build list items.
-	Int i;
-	for (i=0; i<TheSidesList->getNumSides(); i++) {
+	
+	// Clear build list selection
+	for (Int i = 0; i < TheSidesList->getNumSides(); i++) {
 		SidesInfo *pSide = TheSidesList->getSideInfo(i);
 		for (BuildListInfo *pBuild = pSide->getBuildList(); pBuild; pBuild = pBuild->getNext()) {
-			if (pBuild->isSelected()) {
-				pBuild->setSelected(false);
-			}
+			pBuild->setSelected(false);
 		}
 	}
+	
 	m_poly_curSelectedPolygon = NULL;
 	
-	// Hide the gizmo when selection is cleared
+	// Update gizmo visibility
 	PointerTool* pointerTool = WbApp()->getPointerTool();
 	if (pointerTool) {
 		pointerTool->refreshGizmo();
@@ -225,29 +221,20 @@ void PointerTool::deactivate()
 /** Set the cursor. */
 void PointerTool::setCursor(void)
 {
-	// Check gizmo hover state first
 	if (m_hoveredGizmoComponent == GIZMO_ROTATE_Z) {
-		if (m_rotateCursor == NULL) {
+		if (!m_rotateCursor) {
 			m_rotateCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_ROTATE));
 		}
 		::SetCursor(m_rotateCursor);
 		return;
 	}
 	if (m_hoveredGizmoComponent != GIZMO_NONE) {
-		if (m_hoveredGizmoComponent == GIZMO_ROTATE_Z) {
-			if (m_rotateCursor == NULL) {
-				m_rotateCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_ROTATE));
-			}
-			::SetCursor(m_rotateCursor);
-		} else {
-			if (m_moveCursor == NULL) {
-				m_moveCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_MOVE_POINTER));
-			}
-			::SetCursor(m_moveCursor);
+		if (!m_moveCursor) {
+			m_moveCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_MOVE_POINTER));
 		}
+		::SetCursor(m_moveCursor);
 		return;
 	}
-	
 	Tool::setCursor();
 }
 
@@ -533,13 +520,7 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 		// MapObject gizmo - requires undoable
 		if (!m_modifyUndoable) return;
 		
-		MapObject *curMapObj = MapObject::getFirstMapObject();
-		while (curMapObj) {
-			if (curMapObj->isSelected()) {
-				pView->invalObjectInView(curMapObj);
-			}
-			curMapObj = curMapObj->getNext();
-		}
+		invalSelectedObjectsInView(pView);
 		
 		if (m_activeGizmoComponent == GIZMO_ROTATE_Z) {
 			handleGizmoRotation(viewPt, pView, pDoc);
@@ -547,15 +528,8 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 			handleGizmoTranslation(m_activeGizmoComponent, viewPt, pView, pDoc);
 		}
 		
-		curMapObj = MapObject::getFirstMapObject();
-		while (curMapObj) {
-			if (curMapObj->isSelected()) {
-				pView->invalObjectInView(curMapObj);
-			}
-			curMapObj = curMapObj->getNext();
-		}
+		invalSelectedObjectsInView(pView);
 		updateGizmoCenter();
-		
 		pDoc->updateAllViews();
 		return;
 	}
@@ -575,27 +549,14 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 	}
 	if (!m_moving || !m_modifyUndoable) return;
 
-	MapObject *curMapObj = MapObject::getFirstMapObject();
-	while (curMapObj) {
-		if (curMapObj->isSelected()) {
-			pView->invalObjectInView(curMapObj);
-		}
-		curMapObj = curMapObj->getNext();
-	}
+	invalSelectedObjectsInView(pView);
 
 	pView->snapPoint(&cpt);
 	Real xOffset = (cpt.x-m_downPt3d.x);
 	Real yOffset = (cpt.y-m_downPt3d.y);
 	m_modifyUndoable->SetOffset(xOffset, yOffset);
 
-	curMapObj = MapObject::getFirstMapObject();
-	while (curMapObj) {
-		if (curMapObj->isSelected()) {
-			pView->invalObjectInView(curMapObj);
-		}
-		curMapObj = curMapObj->getNext();
-	}
-
+	invalSelectedObjectsInView(pView);
 	updateGizmoCenter();
 	pDoc->updateAllViews();
 
@@ -681,48 +642,37 @@ void PointerTool::updateGizmoCenter(void)
 	Coord3D center = {0, 0, 0};
 	Real firstAngle = 0;
 	
-	MapObject *pObj = MapObject::getFirstMapObject();
-	while (pObj) {
+	for (MapObject *pObj = MapObject::getFirstMapObject(); pObj; pObj = pObj->getNext()) {
 		if (pObj->isSelected()) {
 			const Coord3D* loc = pObj->getLocation();
 			center.x += loc->x;
 			center.y += loc->y;
 			center.z += loc->z;
-			if (count == 0) {
-				firstAngle = pObj->getAngle();
-			}
+			if (count == 0) firstAngle = pObj->getAngle();
 			count++;
 		}
-		pObj = pObj->getNext();
 	}
 	
 	if (count > 0) {
-		center.x /= count;
-		center.y /= count;
-		center.z /= count;
-		m_gizmoCenter = center;
+		m_gizmoCenter.x = center.x / count;
+		m_gizmoCenter.y = center.y / count;
+		m_gizmoCenter.z = center.z / count;
 		m_gizmoAngle = firstAngle;
 		m_gizmoVisible = true;
 		m_gizmoIsPolygon = false;
+		return;
+	}
+	
+	// Check for polygon selection
+	Coord3D loc;
+	if (PolygonTool::getSelectedPointLocation(&loc) || PolygonTool::getSelectedPolygonCenter(&loc)) {
+		m_gizmoCenter = loc;
+		m_gizmoAngle = 0;
+		m_gizmoVisible = true;
+		m_gizmoIsPolygon = true;
 	} else {
-		Coord3D pointLoc;
-		if (PolygonTool::getSelectedPointLocation(&pointLoc)) {
-			m_gizmoCenter = pointLoc;
-			m_gizmoAngle = 0;
-			m_gizmoVisible = true;
-			m_gizmoIsPolygon = true;
-		} else {
-			Coord3D polyCenter;
-			if (PolygonTool::getSelectedPolygonCenter(&polyCenter)) {
-				m_gizmoCenter = polyCenter;
-				m_gizmoAngle = 0;
-				m_gizmoVisible = true;
-				m_gizmoIsPolygon = true;
-			} else {
-				m_gizmoVisible = false;
-				m_gizmoIsPolygon = false;
-			}
-		}
+		m_gizmoVisible = false;
+		m_gizmoIsPolygon = false;
 	}
 }
 
@@ -908,13 +858,11 @@ void PointerTool::handleGizmoTranslation(GizmoComponent axis, CPoint viewPt, WbV
 		if (axis != GIZMO_MOVE_Z) {
 			if (PolygonTool::hasSelectedPoint()) {
 				PolygonTool::setSelectedPointOffset(snappedXOffset, snappedYOffset);
-				m_gizmoCenter.x = m_gizmoPolygonStartCenter.x + snappedXOffset;
-				m_gizmoCenter.y = m_gizmoPolygonStartCenter.y + snappedYOffset;
 			} else {
 				PolygonTool::setPolygonOffset(snappedXOffset, snappedYOffset);
-				m_gizmoCenter.x = m_gizmoPolygonStartCenter.x + snappedXOffset;
-				m_gizmoCenter.y = m_gizmoPolygonStartCenter.y + snappedYOffset;
 			}
+			m_gizmoCenter.x = m_gizmoPolygonStartCenter.x + snappedXOffset;
+			m_gizmoCenter.y = m_gizmoPolygonStartCenter.y + snappedYOffset;
 		}
 	} else {
 		xOffset = snappedXOffset;
@@ -962,18 +910,10 @@ void PointerTool::handleGizmoRotation(CPoint viewPt, WbView* pView, CWorldBuilde
 	m_gizmoRotationDelta = newAngle - m_gizmoObjectStartAngle;
 	
 	if (m_gizmoIsPolygon) {
-		Real rotationDelta = scaledDelta - m_gizmoPrevMouseAngle;
 		PolygonTool::rotateSelectedPolygon(frameDelta * 1.5f, m_gizmoCenter);
 		updateGizmoCenter();
-	} else {
-		MapObject *pObj = MapObject::getFirstMapObject();
-		while (pObj) {
-			if (pObj->isSelected()) {
-				m_modifyUndoable->RotateTo(newAngle);
-				break;
-			}
-			pObj = pObj->getNext();
-		}
+	} else if (m_modifyUndoable) {
+		m_modifyUndoable->RotateTo(newAngle);
 	}
 	
 	Real deltaDegrees = m_gizmoRotationDelta * 180.0f / PI;

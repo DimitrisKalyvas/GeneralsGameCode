@@ -2512,6 +2512,29 @@ void BuildRectFromSegmentAndWidth(const Coord3D* start, const Coord3D* end, Real
 	// all done
 }
 
+// Helper to draw an axis arrow with arrowhead
+static void drawGizmoArrow(Render2DClass* renderer, const ICoord2D& start, const ICoord2D& end, Real width, unsigned long color)
+{
+	Vector2 startV(start.x, start.y);
+	Vector2 endV(end.x, end.y);
+	renderer->Add_Line(startV, endV, width, color);
+	
+	Vector2 dir(end.x - start.x, end.y - start.y);
+	Real len = sqrt(dir.X * dir.X + dir.Y * dir.Y);
+	if (len > 0) {
+		dir.X /= len;
+		dir.Y /= len;
+		Real arrowSize = 10.0f;
+		Vector2 tip(end.x, end.y);
+		Vector2 left(end.x - dir.X * arrowSize - dir.Y * arrowSize * 0.5f,
+		             end.y - dir.Y * arrowSize + dir.X * arrowSize * 0.5f);
+		Vector2 right(end.x - dir.X * arrowSize + dir.Y * arrowSize * 0.5f,
+		              end.y - dir.Y * arrowSize - dir.X * arrowSize * 0.5f);
+		renderer->Add_Line(tip, left, width, color);
+		renderer->Add_Line(tip, right, width, color);
+	}
+}
+
 void DrawObject::renderGizmo(CameraClass* camera)
 {
 	PointerTool* pointerTool = WbApp()->getPointerTool();
@@ -2533,122 +2556,104 @@ void DrawObject::renderGizmo(CameraClass* camera)
 		gizmoPos.z += TheTerrainRenderObject->getHeightMapHeight(center.x, center.y, NULL);
 	}
 	
-	unsigned long colorHighlight = 0xFFFFFF00;
+	// Cache center screen position
+	ICoord2D centerScreen;
+	if (!worldToScreen(&gizmoPos, &centerScreen, camera)) {
+		return;
+	}
+	
+	const unsigned long colorHighlight = 0xFFFFFF00;
 	unsigned long colorX = (hovered == GIZMO_MOVE_X) ? colorHighlight : 0xFFFF0000;
 	unsigned long colorY = (hovered == GIZMO_MOVE_Y) ? colorHighlight : 0xFF00FF00;
 	unsigned long colorZ = (hovered == GIZMO_MOVE_Z) ? colorHighlight : 0xFF0000FF;
 	unsigned long colorXY = (hovered == GIZMO_MOVE_XY) ? colorHighlight : 0xFFFFFF00;
 	unsigned long colorRotate = (hovered == GIZMO_ROTATE_Z) ? colorHighlight : 0xFFFF00FF;
 	
+	const Real lineWidth = 3.0f;
+	const Real highlightWidth = 5.0f;
 	Real axisLength = 40.0f * scale;
-	Real lineWidth = 3.0f;
-	Real highlightWidth = 5.0f;
 	
 	if (mode == GIZMO_MODE_TRANSLATE) {
+		// X axis
 		Coord3D xEnd = gizmoPos;
 		xEnd.x += axisLength * cosA;
 		xEnd.y += axisLength * sinA;
-		
-		ICoord2D centerScreen, xScreen;
-		if (worldToScreen(&gizmoPos, &centerScreen, camera) && 
-		    worldToScreen(&xEnd, &xScreen, camera)) {
-			Real width = (hovered == GIZMO_MOVE_X) ? highlightWidth : lineWidth;
-			m_lineRenderer->Add_Line(
-				Vector2(centerScreen.x, centerScreen.y),
-				Vector2(xScreen.x, xScreen.y),
-				width, colorX);
-			
-			Vector2 dir(xScreen.x - centerScreen.x, xScreen.y - centerScreen.y);
-			Real len = sqrt(dir.X * dir.X + dir.Y * dir.Y);
-			if (len > 0) {
-				dir.X /= len;
-				dir.Y /= len;
-				Real arrowSize = 10.0f;
-				Vector2 tip(xScreen.x, xScreen.y);
-				Vector2 left(xScreen.x - dir.X * arrowSize - dir.Y * arrowSize * 0.5f,
-				             xScreen.y - dir.Y * arrowSize + dir.X * arrowSize * 0.5f);
-				Vector2 right(xScreen.x - dir.X * arrowSize + dir.Y * arrowSize * 0.5f,
-				              xScreen.y - dir.Y * arrowSize - dir.X * arrowSize * 0.5f);
-				m_lineRenderer->Add_Line(tip, left, width, colorX);
-				m_lineRenderer->Add_Line(tip, right, width, colorX);
-			}
+		ICoord2D xScreen;
+		if (worldToScreen(&xEnd, &xScreen, camera)) {
+			Real w = (hovered == GIZMO_MOVE_X) ? highlightWidth : lineWidth;
+			drawGizmoArrow(m_lineRenderer, centerScreen, xScreen, w, colorX);
 		}
 		
+		// Y axis
 		Coord3D yEnd = gizmoPos;
 		yEnd.x += axisLength * (-sinA);
 		yEnd.y += axisLength * cosA;
-		
 		ICoord2D yScreen;
-		if (worldToScreen(&gizmoPos, &centerScreen, camera) && 
-		    worldToScreen(&yEnd, &yScreen, camera)) {
-			Real width = (hovered == GIZMO_MOVE_Y) ? highlightWidth : lineWidth;
-			m_lineRenderer->Add_Line(
-				Vector2(centerScreen.x, centerScreen.y),
-				Vector2(yScreen.x, yScreen.y),
-				width, colorY);
-			
-			Vector2 dir(yScreen.x - centerScreen.x, yScreen.y - centerScreen.y);
-			Real len = sqrt(dir.X * dir.X + dir.Y * dir.Y);
-			if (len > 0) {
-				dir.X /= len;
-				dir.Y /= len;
-				Real arrowSize = 10.0f;
-				Vector2 tip(yScreen.x, yScreen.y);
-				Vector2 left(yScreen.x - dir.X * arrowSize - dir.Y * arrowSize * 0.5f,
-				             yScreen.y - dir.Y * arrowSize + dir.X * arrowSize * 0.5f);
-				Vector2 right(yScreen.x - dir.X * arrowSize + dir.Y * arrowSize * 0.5f,
-				              yScreen.y - dir.Y * arrowSize - dir.X * arrowSize * 0.5f);
-				m_lineRenderer->Add_Line(tip, left, width, colorY);
-				m_lineRenderer->Add_Line(tip, right, width, colorY);
-			}
+		if (worldToScreen(&yEnd, &yScreen, camera)) {
+			Real w = (hovered == GIZMO_MOVE_Y) ? highlightWidth : lineWidth;
+			drawGizmoArrow(m_lineRenderer, centerScreen, yScreen, w, colorY);
 		}
 		
+		// Z axis
 		Coord3D zEnd = gizmoPos;
 		zEnd.z += axisLength;
-		
 		ICoord2D zScreen;
-		if (worldToScreen(&gizmoPos, &centerScreen, camera) && 
-		    worldToScreen(&zEnd, &zScreen, camera)) {
-			Real width = (hovered == GIZMO_MOVE_Z) ? highlightWidth : lineWidth;
-			m_lineRenderer->Add_Line(
-				Vector2(centerScreen.x, centerScreen.y),
-				Vector2(zScreen.x, zScreen.y),
-				width, colorZ);
-			
-			Vector2 dir(zScreen.x - centerScreen.x, zScreen.y - centerScreen.y);
-			Real len = sqrt(dir.X * dir.X + dir.Y * dir.Y);
-			if (len > 0) {
-				dir.X /= len;
-				dir.Y /= len;
-				Real arrowSize = 10.0f;
-				Vector2 tip(zScreen.x, zScreen.y);
-				Vector2 left(zScreen.x - dir.X * arrowSize - dir.Y * arrowSize * 0.5f,
-				             zScreen.y - dir.Y * arrowSize + dir.X * arrowSize * 0.5f);
-				Vector2 right(zScreen.x - dir.X * arrowSize + dir.Y * arrowSize * 0.5f,
-				              zScreen.y - dir.Y * arrowSize - dir.X * arrowSize * 0.5f);
-				m_lineRenderer->Add_Line(tip, left, width, colorZ);
-				m_lineRenderer->Add_Line(tip, right, width, colorZ);
-			}
+		if (worldToScreen(&zEnd, &zScreen, camera)) {
+			Real w = (hovered == GIZMO_MOVE_Z) ? highlightWidth : lineWidth;
+			drawGizmoArrow(m_lineRenderer, centerScreen, zScreen, w, colorZ);
 		}
 		
+		// XY plane indicator (small square at center)
 		Real squareSize = 8.0f * scale;
 		Real sqCos = squareSize * cosA;
 		Real sqSin = squareSize * sinA;
-		Coord3D sq1 = gizmoPos; sq1.x += sqCos - sqSin; sq1.y += sqSin + sqCos;
-		Coord3D sq2 = gizmoPos; sq2.x += -sqCos - sqSin; sq2.y += -sqSin + sqCos;
-		Coord3D sq3 = gizmoPos; sq3.x += -sqCos + sqSin; sq3.y += -sqSin - sqCos;
-		Coord3D sq4 = gizmoPos; sq4.x += sqCos + sqSin; sq4.y += sqSin - sqCos;
+		Coord3D sq[4] = {gizmoPos, gizmoPos, gizmoPos, gizmoPos};
+		sq[0].x += sqCos - sqSin; sq[0].y += sqSin + sqCos;
+		sq[1].x += -sqCos - sqSin; sq[1].y += -sqSin + sqCos;
+		sq[2].x += -sqCos + sqSin; sq[2].y += -sqSin - sqCos;
+		sq[3].x += sqCos + sqSin; sq[3].y += sqSin - sqCos;
 		
-		ICoord2D s1, s2, s3, s4;
-		if (worldToScreen(&sq1, &s1, camera) && 
-		    worldToScreen(&sq2, &s2, camera) &&
-		    worldToScreen(&sq3, &s3, camera) &&
-		    worldToScreen(&sq4, &s4, camera)) {
-			Real width = (hovered == GIZMO_MOVE_XY) ? highlightWidth : lineWidth;
-			m_lineRenderer->Add_Line(Vector2(s1.x, s1.y), Vector2(s2.x, s2.y), width, colorXY);
-			m_lineRenderer->Add_Line(Vector2(s2.x, s2.y), Vector2(s3.x, s3.y), width, colorXY);
-			m_lineRenderer->Add_Line(Vector2(s3.x, s3.y), Vector2(s4.x, s4.y), width, colorXY);
-			m_lineRenderer->Add_Line(Vector2(s4.x, s4.y), Vector2(s1.x, s1.y), width, colorXY);
+		ICoord2D s[4];
+		if (worldToScreen(&sq[0], &s[0], camera) && worldToScreen(&sq[1], &s[1], camera) &&
+		    worldToScreen(&sq[2], &s[2], camera) && worldToScreen(&sq[3], &s[3], camera)) {
+			Real w = (hovered == GIZMO_MOVE_XY) ? highlightWidth : lineWidth;
+			for (int i = 0; i < 4; i++) {
+				m_lineRenderer->Add_Line(Vector2(s[i].x, s[i].y), Vector2(s[(i+1)%4].x, s[(i+1)%4].y), w, colorXY);
+			}
+		}
+		
+		// XY plane fill
+		Real planeSize = 20.0f * scale;
+		Real pCos = planeSize * cosA;
+		Real pSin = planeSize * sinA;
+		Coord3D p[4] = {gizmoPos, gizmoPos, gizmoPos, gizmoPos};
+		p[0].x += pCos - pSin; p[0].y += pSin + pCos;
+		p[1].x += -pCos - pSin; p[1].y += -pSin + pCos;
+		p[2].x += -pCos + pSin; p[2].y += -pSin - pCos;
+		p[3].x += pCos + pSin; p[3].y += pSin - pCos;
+		
+		ICoord2D sp[4];
+		if (worldToScreen(&p[0], &sp[0], camera) && worldToScreen(&p[1], &sp[1], camera) &&
+		    worldToScreen(&p[2], &sp[2], camera) && worldToScreen(&p[3], &sp[3], camera)) {
+			unsigned long planeColor = (hovered == GIZMO_MOVE_XY) ? 0xA0FFFF00 : 0x50FFFF00;
+			unsigned long borderColor = (hovered == GIZMO_MOVE_XY) ? 0xFFFFFF00 : 0x80FFFF00;
+			Real planeWidth = (hovered == GIZMO_MOVE_XY) ? 3.0f : 2.0f;
+			
+			// Grid fill
+			for (int i = 0; i <= 8; i++) {
+				Real t = i / 8.0f;
+				Vector2 a((1-t)*sp[0].x + t*sp[1].x, (1-t)*sp[0].y + t*sp[1].y);
+				Vector2 b((1-t)*sp[3].x + t*sp[2].x, (1-t)*sp[3].y + t*sp[2].y);
+				m_lineRenderer->Add_Line(a, b, planeWidth, planeColor);
+				Vector2 c((1-t)*sp[0].x + t*sp[3].x, (1-t)*sp[0].y + t*sp[3].y);
+				Vector2 d((1-t)*sp[1].x + t*sp[2].x, (1-t)*sp[1].y + t*sp[2].y);
+				m_lineRenderer->Add_Line(c, d, planeWidth, planeColor);
+			}
+			
+			// Border
+			for (int i = 0; i < 4; i++) {
+				m_lineRenderer->Add_Line(Vector2(sp[i].x, sp[i].y), Vector2(sp[(i+1)%4].x, sp[(i+1)%4].y), 2.0f, borderColor);
+			}
 		}
 	}
 	
@@ -2657,6 +2662,7 @@ void DrawObject::renderGizmo(CameraClass* camera)
 		Real width = (hovered == GIZMO_ROTATE_Z) ? highlightWidth : lineWidth;
 		addCircleToLineRenderer(gizmoPos, ringRadius, width, colorRotate, camera);
 		
+		// Small orientation axes
 		Real smallAxisLen = 15.0f * scale;
 		Coord3D xEnd = gizmoPos;
 		xEnd.x += smallAxisLen * cosA;
@@ -2665,111 +2671,52 @@ void DrawObject::renderGizmo(CameraClass* camera)
 		yEnd.x += smallAxisLen * (-sinA);
 		yEnd.y += smallAxisLen * cosA;
 		
-		ICoord2D centerScreen, xScreen, yScreen;
-		if (worldToScreen(&gizmoPos, &centerScreen, camera)) {
-			if (worldToScreen(&xEnd, &xScreen, camera)) {
-				m_lineRenderer->Add_Line(
-					Vector2(centerScreen.x, centerScreen.y),
-					Vector2(xScreen.x, xScreen.y),
-					2.0f, 0xFFFF0000);
-			}
-			if (worldToScreen(&yEnd, &yScreen, camera)) {
-				m_lineRenderer->Add_Line(
-					Vector2(centerScreen.x, centerScreen.y),
-					Vector2(yScreen.x, yScreen.y),
-					2.0f, 0xFF00FF00);
-			}
+		ICoord2D xScreen, yScreen;
+		if (worldToScreen(&xEnd, &xScreen, camera)) {
+			m_lineRenderer->Add_Line(Vector2(centerScreen.x, centerScreen.y), Vector2(xScreen.x, xScreen.y), 2.0f, 0xFFFF0000);
+		}
+		if (worldToScreen(&yEnd, &yScreen, camera)) {
+			m_lineRenderer->Add_Line(Vector2(centerScreen.x, centerScreen.y), Vector2(yScreen.x, yScreen.y), 2.0f, 0xFF00FF00);
+		}
+		
+		// Rotation arc visualization
+		if (pointerTool->isGizmoRotating()) {
+			Real startAngle = pointerTool->getGizmoStartAngle();
+			Real deltaAngle = pointerTool->getGizmoRotationDelta();
+			Real currentAngle = startAngle + deltaAngle;
+			Real lineLen = ringRadius * 1.3f;
 			
-			if (pointerTool->isGizmoRotating()) {
-				Real startAngle = pointerTool->getGizmoStartAngle();
-				Real deltaAngle = pointerTool->getGizmoRotationDelta();
-				Real currentAngle = startAngle + deltaAngle;
+			Coord3D startEnd = gizmoPos;
+			startEnd.x += lineLen * cos(startAngle);
+			startEnd.y += lineLen * sin(startAngle);
+			Coord3D curEnd = gizmoPos;
+			curEnd.x += lineLen * cos(currentAngle);
+			curEnd.y += lineLen * sin(currentAngle);
+			
+			ICoord2D startScreen, curScreen;
+			if (worldToScreen(&startEnd, &startScreen, camera) && worldToScreen(&curEnd, &curScreen, camera)) {
+				m_lineRenderer->Add_Line(Vector2(centerScreen.x, centerScreen.y), Vector2(startScreen.x, startScreen.y), 2.0f, 0x80FFFFFF);
+				m_lineRenderer->Add_Line(Vector2(centerScreen.x, centerScreen.y), Vector2(curScreen.x, curScreen.y), 3.0f, 0xFF00FFFF);
 				
-				Real lineLen = ringRadius * 1.3f;
-				
-				Coord3D startEnd = gizmoPos;
-				startEnd.x += lineLen * cos(startAngle);
-				startEnd.y += lineLen * sin(startAngle);
-				Coord3D curEnd = gizmoPos;
-				curEnd.x += lineLen * cos(currentAngle);
-				curEnd.y += lineLen * sin(currentAngle);
-				
-				ICoord2D startScreen, curScreen;
-				if (worldToScreen(&startEnd, &startScreen, camera) &&
-				    worldToScreen(&curEnd, &curScreen, camera)) {
-					m_lineRenderer->Add_Line(
-						Vector2(centerScreen.x, centerScreen.y),
-						Vector2(startScreen.x, startScreen.y),
-						2.0f, 0x80FFFFFF);
-					m_lineRenderer->Add_Line(
-						Vector2(centerScreen.x, centerScreen.y),
-						Vector2(curScreen.x, curScreen.y),
-						3.0f, 0xFF00FFFF);
+				// Arc
+				Int numArcSegs = max(12, (Int)(fabs(deltaAngle) * 15));
+				Real arcRadius = ringRadius * 0.6f;
+				for (Int i = 0; i < numArcSegs; i++) {
+					Real t1 = (Real)i / numArcSegs;
+					Real t2 = (Real)(i + 1) / numArcSegs;
+					Coord3D arcP1 = gizmoPos;
+					arcP1.x += arcRadius * cos(startAngle + deltaAngle * t1);
+					arcP1.y += arcRadius * sin(startAngle + deltaAngle * t1);
+					Coord3D arcP2 = gizmoPos;
+					arcP2.x += arcRadius * cos(startAngle + deltaAngle * t2);
+					arcP2.y += arcRadius * sin(startAngle + deltaAngle * t2);
 					
-					Int numArcSegs = max(12, (Int)(fabs(deltaAngle) * 15));
-					Real arcRadius = ringRadius * 0.6f;
-					for (Int i = 0; i < numArcSegs; i++) {
-						Real t1 = (Real)i / numArcSegs;
-						Real t2 = (Real)(i + 1) / numArcSegs;
-						Real a1 = startAngle + deltaAngle * t1;
-						Real a2 = startAngle + deltaAngle * t2;
-						
-						Coord3D arcP1 = gizmoPos;
-						arcP1.x += arcRadius * cos(a1);
-						arcP1.y += arcRadius * sin(a1);
-						Coord3D arcP2 = gizmoPos;
-						arcP2.x += arcRadius * cos(a2);
-						arcP2.y += arcRadius * sin(a2);
-						
-						ICoord2D sp1, sp2;
-						if (worldToScreen(&arcP1, &sp1, camera) &&
-						    worldToScreen(&arcP2, &sp2, camera)) {
-							m_lineRenderer->Add_Line(
-								Vector2(sp1.x, sp1.y),
-								Vector2(sp2.x, sp2.y),
-								3.0f, 0xFF00FFFF);
-						}
+					ICoord2D asp1, asp2;
+					if (worldToScreen(&arcP1, &asp1, camera) && worldToScreen(&arcP2, &asp2, camera)) {
+						m_lineRenderer->Add_Line(Vector2(asp1.x, asp1.y), Vector2(asp2.x, asp2.y), 3.0f, 0xFF00FFFF);
 					}
 				}
 			}
-		}
-	}
-	
-	if (mode == GIZMO_MODE_TRANSLATE) {
-		Real planeSize = 20.0f * scale;
-		Real pCos = planeSize * cosA;
-		Real pSin = planeSize * sinA;
-		Coord3D p1 = gizmoPos; p1.x += pCos - pSin; p1.y += pSin + pCos;
-		Coord3D p2 = gizmoPos; p2.x += -pCos - pSin; p2.y += -pSin + pCos;
-		Coord3D p3 = gizmoPos; p3.x += -pCos + pSin; p3.y += -pSin - pCos;
-		Coord3D p4 = gizmoPos; p4.x += pCos + pSin; p4.y += pSin - pCos;
-		
-		ICoord2D sp1, sp2, sp3, sp4;
-		if (worldToScreen(&p1, &sp1, camera) && 
-		    worldToScreen(&p2, &sp2, camera) &&
-		    worldToScreen(&p3, &sp3, camera) &&
-		    worldToScreen(&p4, &sp4, camera)) {
-			unsigned long planeColor = (hovered == GIZMO_MOVE_XY) ? 0xA0FFFF00 : 0x50FFFF00;
-			unsigned long borderColor = (hovered == GIZMO_MOVE_XY) ? 0xFFFFFF00 : 0x80FFFF00;
-			Real planeWidth = (hovered == GIZMO_MOVE_XY) ? 3.0f : 2.0f;
-			
-			for (int i = 0; i <= 8; i++) {
-				Real t = i / 8.0f;
-				Vector2 a((1-t)*sp1.x + t*sp2.x, (1-t)*sp1.y + t*sp2.y);
-				Vector2 b((1-t)*sp4.x + t*sp3.x, (1-t)*sp4.y + t*sp3.y);
-				m_lineRenderer->Add_Line(a, b, planeWidth, planeColor);
-			}
-			for (int i = 0; i <= 8; i++) {
-				Real t = i / 8.0f;
-				Vector2 a((1-t)*sp1.x + t*sp4.x, (1-t)*sp1.y + t*sp4.y);
-				Vector2 b((1-t)*sp2.x + t*sp3.x, (1-t)*sp2.y + t*sp3.y);
-				m_lineRenderer->Add_Line(a, b, planeWidth, planeColor);
-			}
-			
-			m_lineRenderer->Add_Line(Vector2(sp1.x, sp1.y), Vector2(sp2.x, sp2.y), 2.0f, borderColor);
-			m_lineRenderer->Add_Line(Vector2(sp2.x, sp2.y), Vector2(sp3.x, sp3.y), 2.0f, borderColor);
-			m_lineRenderer->Add_Line(Vector2(sp3.x, sp3.y), Vector2(sp4.x, sp4.y), 2.0f, borderColor);
-			m_lineRenderer->Add_Line(Vector2(sp4.x, sp4.y), Vector2(sp1.x, sp1.y), 2.0f, borderColor);
 		}
 	}
 	
