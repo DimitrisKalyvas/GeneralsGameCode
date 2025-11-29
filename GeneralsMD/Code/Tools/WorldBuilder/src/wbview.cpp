@@ -36,6 +36,7 @@
 #include "teamsdialog.h"
 #include "LayersList.h"
 #include "BrushTool.h"
+#include "PointerTool.h"
 
 Bool WbView::m_snapToGrid = false;
 
@@ -478,6 +479,12 @@ void WbView::OnEditDelete()
 	// Execute it.
 	pDoc->AddAndDoUndoable(pUndo);
 	REF_PTR_RELEASE(pUndo); // belongs to pDoc now.
+	
+	// Refresh gizmo after deletion
+	PointerTool* pointerTool = WbApp()->getPointerTool();
+	if (pointerTool) {
+		pointerTool->refreshGizmo();
+	}
 }
 
 /** Handles the key down event.  Currently, handles delete keys, and checks

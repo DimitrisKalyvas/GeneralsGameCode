@@ -27,6 +27,7 @@
 #include "propedit.h"
 #include "CUndoable.h"
 #include "EditParameter.h"
+#include "PointerTool.h"
 
 #include "Common/ThingTemplate.h"
 #include "Common/UnicodeString.h"
@@ -135,6 +136,7 @@ BEGIN_MESSAGE_MAP(MapObjectProps, CDialog)
 	ON_EN_KILLFOCUS(IDC_MAPOBJECT_VisionDistance, _VisibilityToDict)
 	ON_EN_KILLFOCUS(IDC_MAPOBJECT_XYPosition, OnKillfocusMAPOBJECTXYPosition)
 	ON_EN_KILLFOCUS(IDC_MAPOBJECT_ZOffset, SetZOffset)
+	ON_EN_KILLFOCUS(IDC_ROTATION_SNAP, OnRotationSnapChanged)
 	ON_EN_KILLFOCUS(IDC_MAX_RANGE_EDIT, maxRangeToDict)
 	ON_EN_KILLFOCUS(IDC_MIN_RANGE_EDIT, minRangeToDict)
 	ON_EN_KILLFOCUS(IDC_MIN_VOLUME_EDIT, minVolumeToDict)
@@ -543,6 +545,19 @@ void MapObjectProps::SetAngle(void)
       pDoc->AddAndDoUndoable(pUndo);
       pUndo->RotateTo(angle * PI/180);
       REF_PTR_RELEASE(pUndo); // belongs to pDoc now.
+    }
+  }
+}
+
+void MapObjectProps::OnRotationSnapChanged(void)
+{
+  CWnd* edit = GetDlgItem(IDC_ROTATION_SNAP);
+  CString cstr;
+  edit->GetWindowText(cstr);
+  if (!cstr.IsEmpty()) {
+    Real snap = (Real)atof(cstr);
+    if (snap >= 0 && snap <= 360) {
+      PointerTool::setRotationSnapDegrees(snap);
     }
   }
 }
@@ -1605,6 +1620,11 @@ BOOL MapObjectProps::OnInitDialog()
 	m_angle = 0;
 	m_height = 0;
 	m_scale = 1.0f;
+
+	// Initialize rotation snap edit
+	CString snapStr;
+	snapStr.Format("%.0f", PointerTool::getRotationSnapDegrees());
+	SetDlgItemText(IDC_ROTATION_SNAP, snapStr);
 
 	InitSound();
 	updateTheUI();

@@ -102,7 +102,7 @@ BOOL MeshMoldOptions::OnInitDialog()
 					}
 				}
 				char *nameStart = fileBuf;
-				for (i=0; i<strlen(fileBuf)-1; i++) {
+				for (i=0; i<(Int)strlen(fileBuf)-1; i++) {
 					if (fileBuf[i] == '\\') {
 						nameStart = fileBuf+i+1;
 					}

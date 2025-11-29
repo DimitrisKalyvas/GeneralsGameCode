@@ -165,7 +165,7 @@ Bool PolygonTool::poly_snapToPoly(Coord3D *pLoc) {
 			cpt.x -= iLoc.x;
 			cpt.y -= iLoc.y;
 			cpt.z = 0;
-			if (cpt.length() < 1.0f*SNAP_DISTANCE) {
+			if (cpt.length() < 1.0f * (Real)SNAP_DISTANCE) {
 				pLoc->x = iLoc.x;
 				pLoc->y = iLoc.y;
 				return true;

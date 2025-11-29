@@ -63,6 +63,7 @@
 #include "WHeightMapEdit.h"
 #include "WorldBuilderDoc.h"
 #include "MainFrm.h"
+#include "PointerTool.h"
 #include "W3DDevice/GameClient/WorldHeightMap.h"
 #include "W3DDevice/GameClient/W3DShaderManager.h"
 #include "W3DDevice/GameClient/W3DDynamicLight.h"
@@ -2135,6 +2136,49 @@ void WbView3d::render()
 		//if (mytext) mytext->Render();
 		if (m3DFont) {
 			drawLabels(NULL);
+			
+			// Draw gizmo rotation angle text
+			PointerTool* pointerTool = WbApp()->getPointerTool();
+			if (pointerTool && pointerTool->isGizmoRotating()) {
+				const Coord3D& gizmoCenter = pointerTool->getGizmoCenter();
+				Real gizmoScale = pointerTool->getGizmoScale();
+				Real deltaAngle = pointerTool->getGizmoRotationDelta();
+				Real degrees = deltaAngle * 180.0f / 3.14159265f;
+				
+				// Project gizmo center to screen
+				Vector3 worldPos(gizmoCenter.x, gizmoCenter.y, gizmoCenter.z);
+				Vector3 screenPos;
+				m_camera->Project(screenPos, worldPos);
+				
+				CRect rClient;
+				GetClientRect(&rClient);
+				Int sx, sy;
+				W3DLogicalScreenToPixelScreen(screenPos.X, screenPos.Y, &sx, &sy,
+					rClient.right - rClient.left, rClient.bottom - rClient.top);
+				
+				// Position text above the gizmo ring
+				Int textX = rClient.left + sx;
+				Int textY = rClient.top + sy - (Int)(50.0f * gizmoScale);
+				
+				char angleText[32];
+				sprintf(angleText, "%.0f", degrees);
+				
+				RECT textRect;
+				textRect.left = textRect.right = textX;
+				textRect.top = textRect.bottom = textY;
+				
+				// Draw shadow
+				textRect.left += 1; textRect.top += 1;
+				textRect.right += 1; textRect.bottom += 1;
+				m3DFont->DrawText(angleText, (Int)strlen(angleText), &textRect,
+					DT_CENTER | DT_NOCLIP | DT_TOP | DT_SINGLELINE, 0xFF000000);
+				
+				// Draw text
+				textRect.left -= 1; textRect.top -= 1;
+				textRect.right -= 1; textRect.bottom -= 1;
+				m3DFont->DrawText(angleText, (Int)strlen(angleText), &textRect,
+					DT_CENTER | DT_NOCLIP | DT_TOP | DT_SINGLELINE, 0xFF00FFFF);
+			}
 		}
 
 

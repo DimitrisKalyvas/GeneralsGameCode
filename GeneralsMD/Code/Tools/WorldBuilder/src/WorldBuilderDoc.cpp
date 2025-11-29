@@ -57,6 +57,7 @@
 #include "WHeightMapEdit.h"
 #include "WorldBuilderDoc.h"
 #include "WorldBuilderView.h"
+#include "PointerTool.h"
 #include "MapPreview.h"
 
 
@@ -982,6 +983,11 @@ void CWorldBuilderDoc::OnEditRedo()
 			m_curRedo--;
 		}
 	}
+	
+	PointerTool* pointerTool = WbApp()->getPointerTool();
+	if (pointerTool) {
+		pointerTool->refreshGizmo();
+	}
 }
 
 void CWorldBuilderDoc::OnUpdateEditRedo(CCmdUI* pCmdUI)
@@ -1003,6 +1009,11 @@ void CWorldBuilderDoc::OnEditUndo()
 		pUndo->Undo();
 		SetModifiedFlag();
 		m_curRedo++;
+	}
+	
+	PointerTool* pointerTool = WbApp()->getPointerTool();
+	if (pointerTool) {
+		pointerTool->refreshGizmo();
 	}
 }
 

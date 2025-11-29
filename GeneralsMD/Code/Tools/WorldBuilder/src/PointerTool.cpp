@@ -37,6 +37,9 @@
 #include "ObjectTool.h"
 #include "W3DDevice/GameClient/HeightMap.h"
 
+// Static member initialization
+Real PointerTool::s_rotationSnapDegrees = 3.0f;
+
 //
 // Static helper functions
 // This function spiders out and un/picks all Waypoints that have some form of indirect contact with this point
@@ -101,8 +104,11 @@ PointerTool::PointerTool(void) :
 	m_gizmoVisible(false),
 	m_gizmoRotating(false),
 	m_gizmoDragStartAngle(0),
+	m_gizmoPrevMouseAngle(0),
+	m_gizmoAccumulatedDelta(0),
 	m_gizmoRotationDelta(0),
-	m_gizmoStartAngleForDisplay(0)
+	m_gizmoStartAngleForDisplay(0),
+	m_gizmoObjectStartAngle(0)
 {
 	m_toolID = ID_POINTER_TOOL;
 	m_cursorID = IDC_POINTER;
@@ -182,6 +188,12 @@ void PointerTool::clearSelection(void) ///< Clears the selected objects selected
 		}
 	}
 	m_poly_curSelectedPolygon = NULL;
+	
+	// Hide the gizmo when selection is cleared
+	PointerTool* pointerTool = WbApp()->getPointerTool();
+	if (pointerTool) {
+		pointerTool->refreshGizmo();
+	}
 }
 
 /// Activate.
@@ -307,7 +319,10 @@ void PointerTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 			Real dx = cpt.x - m_gizmoCenter.x;
 			Real dy = cpt.y - m_gizmoCenter.y;
 			m_gizmoDragStartAngle = atan2(dy, dx);
+			m_gizmoPrevMouseAngle = m_gizmoDragStartAngle;
+			m_gizmoAccumulatedDelta = 0;
 			m_gizmoStartAngleForDisplay = m_gizmoAngle;
+			m_gizmoObjectStartAngle = m_gizmoAngle;
 			m_gizmoRotationDelta = 0;
 			m_gizmoRotating = true;
 		}
@@ -920,24 +935,49 @@ void PointerTool::handleGizmoRotation(CPoint viewPt, WbView* pView, CWorldBuilde
 	
 	Real dx = cpt.x - m_gizmoCenter.x;
 	Real dy = cpt.y - m_gizmoCenter.y;
-	Real currentAngle = atan2(dy, dx);
+	Real currentMouseAngle = atan2(dy, dx);
 	
-	Real deltaAngle = (currentAngle - m_gizmoDragStartAngle) * 0.5f;
-	m_gizmoRotationDelta = deltaAngle;
+	// Calculate incremental delta from previous mouse position (not from start)
+	// This avoids the jump when atan2 wraps from +π to -π
+	Real frameDelta = currentMouseAngle - m_gizmoPrevMouseAngle;
+	
+	if (frameDelta > PI) frameDelta -= 2.0f * PI;
+	if (frameDelta < -PI) frameDelta += 2.0f * PI;
+	
+	m_gizmoAccumulatedDelta += frameDelta;
+	m_gizmoPrevMouseAngle = currentMouseAngle;
+	
+	Real scaledDelta = m_gizmoAccumulatedDelta * 1.5f;
+	
+	Real newAngle = m_gizmoObjectStartAngle + scaledDelta;
+	
+	// Snap to configured increment by default, Shift for free manipulation
+	Bool shiftKey = (0x8000 & ::GetAsyncKeyState(VK_SHIFT)) != 0;
+	Real degrees = newAngle * 180.0f / PI;
+	if (!shiftKey && s_rotationSnapDegrees > 0) {
+		Real halfSnap = s_rotationSnapDegrees * 0.5f;
+		degrees = floor((degrees + halfSnap) / s_rotationSnapDegrees) * s_rotationSnapDegrees;
+	}
+	newAngle = degrees * PI / 180.0f;
+	
+	m_gizmoRotationDelta = newAngle - m_gizmoObjectStartAngle;
 	
 	MapObject *pObj = MapObject::getFirstMapObject();
 	while (pObj) {
 		if (pObj->isSelected()) {
-			Real baseAngle = pObj->getAngle();
-			m_modifyUndoable->RotateTo(baseAngle + deltaAngle);
+			m_modifyUndoable->RotateTo(newAngle);
 			break;
 		}
 		pObj = pObj->getNext();
 	}
 	
-	Real degrees = deltaAngle * 180.0f / 3.14159265f;
+	Real deltaDegrees = m_gizmoRotationDelta * 180.0f / PI;
 	CString str;
-	str.Format("Rotation: %.1f degrees", degrees);
+	if (s_rotationSnapDegrees > 0) {
+		str.Format("Rotation: %.0f degrees (Shift for free rotation, snap: %.0f)", deltaDegrees, s_rotationSnapDegrees);
+	} else {
+		str.Format("Rotation: %.1f degrees", deltaDegrees);
+	}
 	CMainFrame::GetMainFrame()->SetMessageText(str);
 }
 

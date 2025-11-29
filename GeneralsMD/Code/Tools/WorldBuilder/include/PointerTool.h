@@ -76,10 +76,15 @@ protected:
 	Real m_gizmoAngle;
 	Coord3D m_gizmoDragStartPos;
 	Real m_gizmoDragStartAngle;
+	Real m_gizmoPrevMouseAngle;
+	Real m_gizmoAccumulatedDelta;
 	Real m_gizmoRotationDelta;
 	Real m_gizmoStartAngleForDisplay;
+	Real m_gizmoObjectStartAngle;
 	Bool m_gizmoVisible;
 	Bool m_gizmoRotating;
+	
+	static Real s_rotationSnapDegrees;
 
 protected:
 	void checkForPropertiesPanel(void);
@@ -118,4 +123,8 @@ public:
 	Real getGizmoRotationDelta(void) const { return m_gizmoRotationDelta; }
 	Real getGizmoStartAngle(void) const { return m_gizmoStartAngleForDisplay; }
 	void setGizmoMode(GizmoMode mode);
+	void refreshGizmo(void) { updateGizmoCenter(); }
+	
+	static Real getRotationSnapDegrees(void) { return s_rotationSnapDegrees; }
+	static void setRotationSnapDegrees(Real degrees) { s_rotationSnapDegrees = degrees; }
 };

@@ -360,7 +360,7 @@ AsciiString EditParameter::getWarningText(Parameter *pParm, Bool isAction)
 
 
 		case Parameter::BOUNDARY:
-			if (TheTerrainRenderObject->getMap()->getAllBoundaries().size() <= pParm->getInt()) {
+			if ((Int)TheTerrainRenderObject->getMap()->getAllBoundaries().size() <= pParm->getInt()) {
 				warningText.format("Border %s does not exist.", BORDER_COLORS[pParm->getInt() % BORDER_COLORS_SIZE]);
 			}
 			break;
@@ -773,7 +773,7 @@ Bool EditParameter::loadSciences(CComboBox *pCombo, AsciiString match)
 	Bool retVal = false;
 
 	std::vector<AsciiString> v = TheScienceStore->friend_getScienceNames();
-	for (int i = 0; i < v.size(); ++i)
+	for (size_t i = 0; i < v.size(); ++i)
 	{
 		if (pCombo)
 		{
@@ -1135,7 +1135,7 @@ Bool EditParameter::loadAudioType(Parameter::ParameterType  comboType, CComboBox
 	std::vector<AudioEventInfo *> eventInfos;
 	TheAudio->findAllAudioEventsOfType(type, eventInfos);
 
-	for (int i = 0; i < eventInfos.size(); ++i) {
+	for (size_t i = 0; i < eventInfos.size(); ++i) {
 		if (eventInfos[i]) {
 			if (pCombo) {
 				pCombo->AddString(eventInfos[i]->m_audioName.str());
@@ -2371,13 +2371,13 @@ AsciiString EditParameter::loadLocalizedText(CComboBox *pCombo, AsciiString isSt
 	AsciiStringVec vec = TheGameText->getStringsWithLabelPrefix(theScriptPrefix);
 	if (pCombo) {
 		pCombo->Clear();
-		for (int i = 0; i < vec.size(); ++i) {
+		for (size_t i = 0; i < vec.size(); ++i) {
 			pCombo->AddString(vec[i].str());
 		}
 	}
 
 	if (isStringInTable != AsciiString::TheEmptyString) {
-		for (int i = 0; i < vec.size(); ++i) {
+		for (size_t i = 0; i < vec.size(); ++i) {
 			if (isStringInTable.compare(vec[i].str()) == 0) {
 				return vec[i];
 			}

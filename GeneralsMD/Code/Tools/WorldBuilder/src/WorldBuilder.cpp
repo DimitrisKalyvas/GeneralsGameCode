@@ -248,6 +248,8 @@ CWorldBuilderApp::CWorldBuilderApp() :
 /////////////////////////////////////////////////////////////////////////////
 // CWorldBuilderApp destructor
 
+#pragma warning(push)
+#pragma warning(disable: 4722) // destructor never returns - intentional, forces clean exit
 CWorldBuilderApp::~CWorldBuilderApp()
 {
 	m_curTool = NULL;
@@ -260,6 +262,7 @@ CWorldBuilderApp::~CWorldBuilderApp()
 	}
 	_exit(0);
 }
+#pragma warning(pop)
 
 /////////////////////////////////////////////////////////////////////////////
 // Handler for unhandled win32 exceptions.
@@ -315,15 +318,10 @@ BOOL CWorldBuilderApp::InitInstance()
 	loadWindow.setTextOutputLocation(rect);
 	loadWindow.outputText(IDS_SPLASH_LOADING);
 
-	// not part of the subsystem list, because it should normally never be reset!
 	TheNameKeyGenerator = new NameKeyGenerator;
 	TheNameKeyGenerator->init();
 
-#ifdef _AFXDLL
-	Enable3dControls();			// Call this when using MFC in a shared DLL
-#else
-	Enable3dControlsStatic();	// Call this when linking to MFC statically
-#endif
+// Enable3dControls is no longer needed in modern MFC
 
 	// Set the current directory to the app directory.
 	char buf[_MAX_PATH];

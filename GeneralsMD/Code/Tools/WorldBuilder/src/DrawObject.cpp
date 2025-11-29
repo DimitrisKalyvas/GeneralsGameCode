@@ -1219,7 +1219,7 @@ void DrawObject::updateFeedbackVB(void)
 	WorldHeightMapEdit *pMap = pDoc->GetHeightMap();
 #define ADJUST_FROM_INDEX_TO_REAL(k) ((k-pMap->getBorderSize())*MAP_XY_FACTOR)
 
-	if (radius > MAX_RADIUS) radius = MAX_RADIUS;
+	if (radius > (Real)MAX_RADIUS) radius = (Real)MAX_RADIUS;
 	Real offset = 0;
 	if (m_brushWidth&1) offset = 0.5f;
 	Int minX = floor(m_cellCenter.x-radius+offset);

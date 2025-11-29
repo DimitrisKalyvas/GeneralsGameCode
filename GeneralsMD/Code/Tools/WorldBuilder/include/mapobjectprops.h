@@ -146,6 +146,7 @@ protected:
 	afx_msg void minRangeToDict(void);
 	afx_msg void maxRangeToDict(void);
 	afx_msg void priorityToDict(void);
+	afx_msg void OnRotationSnapChanged(void);
 		//}}AFX_MSG
 
 	DECLARE_MESSAGE_MAP()

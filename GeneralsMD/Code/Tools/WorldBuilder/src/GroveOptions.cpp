@@ -107,7 +107,7 @@ AsciiString GroveOptions::getTypeName(int type)
 	}
 
 	int curSel = pComboBox->GetCurSel();
-	if (curSel < 0 || curSel > mVecDisplayNames.size()) {
+	if (curSel < 0 || curSel > (int)mVecDisplayNames.size()) {
 		return "";
 	}
 	CString cstr;
