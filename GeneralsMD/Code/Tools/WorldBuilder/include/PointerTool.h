@@ -56,16 +56,13 @@ protected:
 	MapObject *m_curObject;
 
 	Bool m_moving; ///< True if we are drag moving an object.
-	Bool m_rotating; ///< True if we are rotating an object.
 	Bool m_dragSelect; ///< True if we are drag selecting.
 
 	Bool m_doPolyTool; ///< True if we are using the polygon tool to modify a polygon triggter.
 
 	ModifyObjectUndoable *m_modifyUndoable;	 ///< The modify undoable that is in progress while we track the mouse.
 
-	Bool m_mouseUpRotate;///< True if we are over the "rotate" hotspot.
 	HCURSOR m_rotateCursor;
-	Bool m_mouseUpMove;///< True if we are over the "move" hotspot.
 	HCURSOR m_moveCursor;
 
 	GizmoMode m_gizmoMode;
@@ -76,6 +73,7 @@ protected:
 	Real m_gizmoAngle;
 	Coord3D m_gizmoDragStartPos;
 	Real m_gizmoDragStartAngle;
+	Real m_gizmoDragStartZ;
 	Real m_gizmoPrevMouseAngle;
 	Real m_gizmoAccumulatedDelta;
 	Real m_gizmoRotationDelta;
@@ -83,8 +81,11 @@ protected:
 	Real m_gizmoObjectStartAngle;
 	Bool m_gizmoVisible;
 	Bool m_gizmoRotating;
+	Bool m_gizmoIsPolygon;
+	Coord3D m_gizmoPolygonStartCenter;
 	
 	static Real s_rotationSnapDegrees;
+	static Bool s_lockZAxis;
 
 protected:
 	void checkForPropertiesPanel(void);
@@ -114,6 +115,7 @@ public:
 	static Bool allowPick(MapObject* pMapObj, WbView* pView);
 	
 	Bool isGizmoVisible(void) const { return m_gizmoVisible; }
+	Bool isGizmoForPolygon(void) const { return m_gizmoIsPolygon; }
 	const Coord3D& getGizmoCenter(void) const { return m_gizmoCenter; }
 	Real getGizmoScale(void) const { return m_gizmoScale; }
 	Real getGizmoAngle(void) const { return m_gizmoAngle; }
@@ -127,4 +129,6 @@ public:
 	
 	static Real getRotationSnapDegrees(void) { return s_rotationSnapDegrees; }
 	static void setRotationSnapDegrees(Real degrees) { s_rotationSnapDegrees = degrees; }
+	static Bool getLockZAxis(void) { return s_lockZAxis; }
+	static void setLockZAxis(Bool locked) { s_lockZAxis = locked; }
 };

@@ -27,6 +27,7 @@
 #include "CUndoable.h"
 #include "DrawObject.h"
 #include "PointerTool.h"
+#include "WorldBuilder.h"
 #include "MainFrm.h"
 #include "WHeightMapEdit.h"
 #include "WorldBuilderDoc.h"
@@ -183,6 +184,7 @@ void RoadTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBu
 			pNew1->setSelected(true);
 			pDoc->AddAndDoUndoable(pUndo);
 			REF_PTR_RELEASE(pUndo); // belongs to pDoc now.
+			WbApp()->getPointerTool()->refreshGizmo();
 			m_mapObj = NULL;
 			return;
 		}
@@ -301,6 +303,7 @@ void RoadTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBu
 		pNew3->setSelected(true);
 	}
 
+	WbApp()->getPointerTool()->refreshGizmo();
 }
 /** Move the end of the road segment. */
 void RoadTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBuilderDoc *pDoc)

@@ -71,6 +71,17 @@ public:
 	static Int getSelectedPointNdx(void) {return m_poly_dragPointNdx;};
 	static PolygonTrigger *pickPolygon(Coord3D loc, CPoint viewPt, WbView* pView);
 	static Bool isSelectedOpen(void) {return m_poly_isAdding;};
+	static PolygonTrigger* getSelectedPolygon(void) { return m_poly_curSelectedPolygon; }
+	static Bool getSelectedPolygonCenter(Coord3D* outCenter);
+	static Bool getSelectedPointLocation(Coord3D* outLocation);
+	static Bool hasSelectedPoint(void) { return m_poly_curSelectedPolygon && m_poly_dragPointNdx >= 0; }
+	static void translateSelectedPolygon(Real dx, Real dy);
+	static void translateSelectedPoint(Real dx, Real dy);
+	static void rotateSelectedPolygon(Real angle, const Coord3D& center);
+	
+	static void storePolygonStartPositions(void);
+	static void setPolygonOffset(Real dx, Real dy);
+	static void setSelectedPointOffset(Real dx, Real dy);
 
 public:
 	/// Perform tool on mouse down.

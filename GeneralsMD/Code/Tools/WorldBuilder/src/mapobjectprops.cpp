@@ -134,9 +134,11 @@ BEGIN_MESSAGE_MAP(MapObjectProps, CDialog)
 	ON_EN_KILLFOCUS(IDC_MAPOBJECT_StartingHealthEdit, _HealthToDict)
 	ON_EN_KILLFOCUS(IDC_MAPOBJECT_StoppingDistance, _StoppingDistanceToDict)
 	ON_EN_KILLFOCUS(IDC_MAPOBJECT_VisionDistance, _VisibilityToDict)
-	ON_EN_KILLFOCUS(IDC_MAPOBJECT_XYPosition, OnKillfocusMAPOBJECTXYPosition)
+	ON_EN_KILLFOCUS(IDC_MAPOBJECT_XPosition, OnKillfocusXPosition)
+	ON_EN_KILLFOCUS(IDC_MAPOBJECT_YPosition, OnKillfocusYPosition)
 	ON_EN_KILLFOCUS(IDC_MAPOBJECT_ZOffset, SetZOffset)
 	ON_EN_KILLFOCUS(IDC_ROTATION_SNAP, OnRotationSnapChanged)
+	ON_BN_CLICKED(IDC_LOCK_Z_AXIS, OnLockZAxisChanged)
 	ON_EN_KILLFOCUS(IDC_MAX_RANGE_EDIT, maxRangeToDict)
 	ON_EN_KILLFOCUS(IDC_MIN_RANGE_EDIT, minRangeToDict)
 	ON_EN_KILLFOCUS(IDC_MIN_VOLUME_EDIT, minVolumeToDict)
@@ -518,10 +520,14 @@ void MapObjectProps::ShowPosition(MapObject *pMapObj)
 {
   m_position = *pMapObj->getLocation();
   static char buff[64];
-  snprintf(buff, ARRAY_SIZE(buff), "%0.2f, %0.2f", m_position.x, m_position.y);
-  CWnd* edit = GetDlgItem(IDC_MAPOBJECT_XYPosition);
-  edit->SetWindowText(buff);
-  sscanf(buff, "%f,%f", &m_position.x, &m_position.y);
+  
+  snprintf(buff, ARRAY_SIZE(buff), "%0.2f", m_position.x);
+  CWnd* editX = GetDlgItem(IDC_MAPOBJECT_XPosition);
+  editX->SetWindowText(buff);
+  
+  snprintf(buff, ARRAY_SIZE(buff), "%0.2f", m_position.y);
+  CWnd* editY = GetDlgItem(IDC_MAPOBJECT_YPosition);
+  editY->SetWindowText(buff);
 }
 
 /// Move data from dialog controls to object
@@ -565,28 +571,58 @@ void MapObjectProps::OnRotationSnapChanged(void)
 /// Move data from dialog controls to object
 void MapObjectProps::SetPosition(void)
 {
-  CWnd* edit = GetDlgItem(IDC_MAPOBJECT_XYPosition);
+  SetXPosition();
+  SetYPosition();
+}
+
+void MapObjectProps::SetXPosition(void)
+{
+  CWnd* edit = GetDlgItem(IDC_MAPOBJECT_XPosition);
   CString cstr;
   edit->GetWindowText(cstr);
-  Coord3D loc;
-  loc = m_position;
   if (m_selectedObject==NULL) return;
+  
+  Real newX = m_position.x;
   if (!cstr.IsEmpty()) {
-    if (sscanf(cstr, "%f, %f", &loc.x, &loc.y)!=2)
-      loc = m_position;
+    newX = (Real)atof(cstr);
   }
-  if (loc.x!=m_position.x || loc.y != m_position.y) {
-    m_position = loc;
+  
+  if (newX != m_position.x) {
+    Real oldX = m_position.x;
+    m_position.x = newX;
     CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
-    if ( pDoc )
-    {
+    if (pDoc) {
       ModifyObjectUndoable *pUndo = new ModifyObjectUndoable(pDoc);
       pDoc->AddAndDoUndoable(pUndo);
-      if (m_selectedObject) {
-        loc = *m_selectedObject->getLocation();
-      }
-      pUndo->SetOffset(m_position.x-loc.x, m_position.y-loc.y);
-      REF_PTR_RELEASE(pUndo); // belongs to pDoc now.
+      Coord3D loc = *m_selectedObject->getLocation();
+      pUndo->SetOffset(newX - loc.x, 0);
+      REF_PTR_RELEASE(pUndo);
+    }
+  }
+}
+
+void MapObjectProps::SetYPosition(void)
+{
+  CWnd* edit = GetDlgItem(IDC_MAPOBJECT_YPosition);
+  CString cstr;
+  edit->GetWindowText(cstr);
+  if (m_selectedObject==NULL) return;
+  
+  Real newY = m_position.y;
+  if (!cstr.IsEmpty()) {
+    newY = (Real)atof(cstr);
+  }
+  
+  if (newY != m_position.y) {
+    Real oldY = m_position.y;
+    m_position.y = newY;
+    CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+    if (pDoc) {
+      ModifyObjectUndoable *pUndo = new ModifyObjectUndoable(pDoc);
+      pDoc->AddAndDoUndoable(pUndo);
+      Coord3D loc = *m_selectedObject->getLocation();
+      pUndo->SetOffset(0, newY - loc.y);
+      REF_PTR_RELEASE(pUndo);
     }
   }
 }
@@ -614,6 +650,27 @@ void MapObjectProps::GetPopSliderInfo(const long sliderID, long *pMin, long *pMa
 			*pMin = 1;
 			*pMax = 500;
 			*pInitial = m_scale*100;
+			*pLineSize = 1;
+			break;
+
+		case IDC_XPOS_POPUP:
+			*pMin = -1000;
+			*pMax = 5000;
+			*pInitial = (long)m_position.x;
+			*pLineSize = 10;
+			break;
+
+		case IDC_YPOS_POPUP:
+			*pMin = -1000;
+			*pMax = 5000;
+			*pInitial = (long)m_position.y;
+			*pLineSize = 10;
+			break;
+
+		case IDC_SNAP_POPUP:
+			*pMin = 1;
+			*pMax = 90;
+			*pInitial = (long)PointerTool::getRotationSnapDegrees();
 			*pLineSize = 1;
 			break;
 
@@ -665,6 +722,43 @@ void MapObjectProps::PopSliderChanged(const long sliderID, long theVal)
 			edit->SetWindowText(buff);
 			break;
 
+		case IDC_XPOS_POPUP:
+			if (!m_posUndoable) {
+				m_posUndoable = new ModifyObjectUndoable(pDoc);
+				pDoc->AddAndDoUndoable(m_posUndoable);
+			}
+			{
+				Coord3D loc = *m_selectedObject->getLocation();
+				m_posUndoable->SetOffset((Real)theVal - loc.x, 0);
+			}
+			m_position.x = (Real)theVal;
+			snprintf(buff, ARRAY_SIZE(buff), "%0.2f", m_position.x);
+			edit = GetDlgItem(IDC_MAPOBJECT_XPosition);
+			edit->SetWindowText(buff);
+			break;
+
+		case IDC_YPOS_POPUP:
+			if (!m_posUndoable) {
+				m_posUndoable = new ModifyObjectUndoable(pDoc);
+				pDoc->AddAndDoUndoable(m_posUndoable);
+			}
+			{
+				Coord3D loc = *m_selectedObject->getLocation();
+				m_posUndoable->SetOffset(0, (Real)theVal - loc.y);
+			}
+			m_position.y = (Real)theVal;
+			snprintf(buff, ARRAY_SIZE(buff), "%0.2f", m_position.y);
+			edit = GetDlgItem(IDC_MAPOBJECT_YPosition);
+			edit->SetWindowText(buff);
+			break;
+
+		case IDC_SNAP_POPUP:
+			PointerTool::setRotationSnapDegrees((Real)theVal);
+			snprintf(buff, ARRAY_SIZE(buff), "%d", theVal);
+			edit = GetDlgItem(IDC_ROTATION_SNAP);
+			edit->SetWindowText(buff);
+			break;
+
 		default:
 			// uh-oh!
 			DEBUG_CRASH(("Slider message from unknown control"));
@@ -678,11 +772,16 @@ void MapObjectProps::PopSliderFinished(const long sliderID, long theVal)
 	switch (sliderID) {
 		case IDC_HEIGHT_POPUP:
 		case IDC_ANGLE_POPUP:
+		case IDC_XPOS_POPUP:
+		case IDC_YPOS_POPUP:
       if ( m_posUndoable != NULL )
       {
   			REF_PTR_RELEASE(m_posUndoable); // belongs to pDoc now.
       }
 			m_posUndoable = NULL;
+			break;
+
+		case IDC_SNAP_POPUP:
 			break;
 
 		case IDC_SCALE_POPUP:
@@ -1616,6 +1715,9 @@ BOOL MapObjectProps::OnInitDialog()
   m_heightSlider.SetupPopSliderButton(this, IDC_HEIGHT_POPUP, this);
   m_angleSlider.SetupPopSliderButton(this, IDC_ANGLE_POPUP, this);
   m_scaleSlider.SetupPopSliderButton(this, IDC_SCALE_POPUP, this);
+  m_xPosSlider.SetupPopSliderButton(this, IDC_XPOS_POPUP, this);
+  m_yPosSlider.SetupPopSliderButton(this, IDC_YPOS_POPUP, this);
+  m_snapSlider.SetupPopSliderButton(this, IDC_SNAP_POPUP, this);
 	m_posUndoable = NULL;
 	m_angle = 0;
 	m_height = 0;
@@ -1625,6 +1727,12 @@ BOOL MapObjectProps::OnInitDialog()
 	CString snapStr;
 	snapStr.Format("%.0f", PointerTool::getRotationSnapDegrees());
 	SetDlgItemText(IDC_ROTATION_SNAP, snapStr);
+	
+	// Initialize Lock Z checkbox
+	CButton* lockZBtn = (CButton*)GetDlgItem(IDC_LOCK_Z_AXIS);
+	if (lockZBtn) {
+		lockZBtn->SetCheck(PointerTool::getLockZAxis() ? BST_CHECKED : BST_UNCHECKED);
+	}
 
 	InitSound();
 	updateTheUI();
@@ -2905,9 +3013,38 @@ void MapObjectProps::OnScaleOff()
   _ScaleToDict();
 }
 
-/// Move data from dialog controls to object
-void MapObjectProps::OnKillfocusMAPOBJECTXYPosition()
+void MapObjectProps::OnKillfocusXPosition()
 {
-  SetPosition();
+  SetXPosition();
+}
+
+void MapObjectProps::OnKillfocusYPosition()
+{
+  SetYPosition();
+}
+
+void MapObjectProps::OnLockZAxisChanged()
+{
+  CButton* lockBtn = (CButton*)GetDlgItem(IDC_LOCK_Z_AXIS);
+  if (lockBtn) {
+    Bool locked = (lockBtn->GetCheck() == BST_CHECKED);
+    PointerTool::setLockZAxis(locked);
+    
+    if (locked && m_selectedObject) {
+      CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+      if (pDoc) {
+        ModifyObjectUndoable *pUndo = new ModifyObjectUndoable(pDoc);
+        pDoc->AddAndDoUndoable(pUndo);
+        pUndo->SetZOffset(0);
+        REF_PTR_RELEASE(pUndo);
+        
+        m_height = 0;
+        SetDlgItemText(IDC_MAPOBJECT_ZOffset, "0.00");
+        
+        WbApp()->getPointerTool()->refreshGizmo();
+        pDoc->updateAllViews();
+      }
+    }
+  }
 }
 

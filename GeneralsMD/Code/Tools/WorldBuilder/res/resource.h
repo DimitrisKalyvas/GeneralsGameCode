@@ -581,6 +581,12 @@
 #define IDC_MAPOBJECT_DISTANCE          1383
 #define IDC_ROTATION_SNAP               1384
 #define IDC_STATIC_ROTATION_SNAP        1385
+#define IDC_MAPOBJECT_XPosition         1386
+#define IDC_MAPOBJECT_YPosition         1387
+#define IDC_XPOS_POPUP                  1388
+#define IDC_YPOS_POPUP                  1389
+#define IDC_LOCK_Z_AXIS                 1390
+#define IDC_SNAP_POPUP                  1391
 #define ID_BRUSH_TOOL                   32771
 #define IDM_ShowGrid                    32772
 #define ID_FEATHERTOOL                  32791

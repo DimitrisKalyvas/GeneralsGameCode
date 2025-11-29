@@ -286,6 +286,8 @@ void AddObjectUndoable::Do(void)
 		loadStr.Format(IDS_MAX_OBJECTS, MAX_OBJECTS_IN_MAP);
 		AfxMessageBox(loadStr, MB_APPLMODAL | MB_ICONEXCLAMATION | MB_OK);
 	}
+	
+	WbApp()->getPointerTool()->refreshGizmo();
 }
 
 //

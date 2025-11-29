@@ -107,6 +107,9 @@ public:
 
 	MeshClass *peekMesh(void) {return m_moldMesh;};
 	void getMeshBounds(SphereClass *pSphere) {*pSphere = m_moldMeshBounds;};
+	const CPoint& getCameraAxesLabelX(void) const { return m_cameraAxesLabelX; }
+	const CPoint& getCameraAxesLabelY(void) const { return m_cameraAxesLabelY; }
+	const CPoint& getCameraAxesLabelZ(void) const { return m_cameraAxesLabelZ; }
 
 protected:
 	enum {MAX_RADIUS = 50, NUM_FEEDBACK_VERTEX = 201*201, NUM_FEEDBACK_INDEX = 101*101*6};
@@ -145,6 +148,9 @@ protected:
 	SphereClass								m_moldMeshBounds;				///< Bounding sphere for mold mesh.
 	Render2DClass							*m_lineRenderer;		//< Used to render 2D lines for bounding boxes.
 	CPoint										m_winSize;				//< Holds the size of the window.
+	CPoint										m_cameraAxesLabelX;
+	CPoint										m_cameraAxesLabelY;
+	CPoint										m_cameraAxesLabelZ;
 
 protected: // static state vars.
 	static Bool								m_squareFeedback;	///< True for square brush feedback, false for round.

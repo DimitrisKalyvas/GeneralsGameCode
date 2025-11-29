@@ -64,6 +64,7 @@
 #include "WorldBuilderDoc.h"
 #include "MainFrm.h"
 #include "PointerTool.h"
+#include "PolygonTool.h"
 #include "W3DDevice/GameClient/WorldHeightMap.h"
 #include "W3DDevice/GameClient/W3DShaderManager.h"
 #include "W3DDevice/GameClient/W3DDynamicLight.h"
@@ -2179,6 +2180,29 @@ void WbView3d::render()
 				m3DFont->DrawText(angleText, (Int)strlen(angleText), &textRect,
 					DT_CENTER | DT_NOCLIP | DT_TOP | DT_SINGLELINE, 0xFF00FFFF);
 			}
+			
+			// Draw camera axes labels (X, Y, Z) when any object or polygon is selected
+			Bool hasSelection = false;
+			for (MapObject* pObj = MapObject::getFirstMapObject(); pObj && !hasSelection; pObj = pObj->getNext()) {
+				if (pObj->isSelected()) {
+					hasSelection = true;
+				}
+			}
+			if (!hasSelection && PolygonTool::getSelectedPolygon()) {
+				hasSelection = true;
+			}
+			if (hasSelection) {
+				CPoint labelX = m_drawObject->getCameraAxesLabelX();
+				CPoint labelY = m_drawObject->getCameraAxesLabelY();
+				CPoint labelZ = m_drawObject->getCameraAxesLabelZ();
+				
+				RECT rectX = { labelX.x - 6, labelX.y - 8, labelX.x + 6, labelX.y + 8 };
+				RECT rectY = { labelY.x - 6, labelY.y - 8, labelY.x + 6, labelY.y + 8 };
+				RECT rectZ = { labelZ.x - 6, labelZ.y - 8, labelZ.x + 6, labelZ.y + 8 };
+				m3DFont->DrawText("X", 1, &rectX, DT_CENTER | DT_NOCLIP | DT_VCENTER | DT_SINGLELINE, 0xFFFF0000);
+				m3DFont->DrawText("Y", 1, &rectY, DT_CENTER | DT_NOCLIP | DT_VCENTER | DT_SINGLELINE, 0xFF00FF00);
+				m3DFont->DrawText("Z", 1, &rectZ, DT_CENTER | DT_NOCLIP | DT_VCENTER | DT_SINGLELINE, 0xFF0000FF);
+			}
 		}
 
 
@@ -3457,3 +3481,4 @@ void WbView3d::drawBrushModeHint(HDC hdc)
 	
 	m_hintDrawnThisFrame = true;
 }
+

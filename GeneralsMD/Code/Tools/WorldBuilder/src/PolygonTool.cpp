@@ -23,6 +23,8 @@
 #include "StdAfx.h"
 #include "resource.h"
 
+#include <vector>
+
 #include "PolygonTool.h"
 #include "CUndoable.h"
 #include "PointerTool.h"
@@ -30,6 +32,7 @@
 #include "WHeightMapEdit.h"
 #include "WorldBuilderDoc.h"
 #include "WorldBuilderView.h"
+#include "WorldBuilder.h"
 #include "MainFrm.h"
 #include "DrawObject.h"
 #include "GameLogic/PolygonTrigger.h"
@@ -43,6 +46,9 @@ Bool PolygonTool::m_poly_isActive = false;
 Bool PolygonTool::m_poly_isAdding = false;
 PolygonTrigger *PolygonTool::m_poly_curSelectedPolygon = NULL;
 Int	PolygonTool::m_poly_dragPointNdx = -1;
+
+static std::vector<ICoord3D> s_polygonStartPositions;
+static ICoord3D s_selectedPointStartPosition = {0, 0, 0};
 
 enum {SNAP_DISTANCE = 5};
 
@@ -350,6 +356,9 @@ void PolygonTool::startMouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, 
 		}
 	}
 	WaypointOptions::update();
+	
+	WbApp()->getPointerTool()->refreshGizmo();
+	pDoc->updateAllViews();
 }
 
 /// Delete the selected polygon or point.
@@ -466,5 +475,140 @@ void PolygonTool::mouseUp(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldB
 {
 	if (m != TRACK_L) return;
 	REF_PTR_RELEASE(m_poly_moveUndoable); // belongs to pDoc now.
+}
+
+Bool PolygonTool::getSelectedPolygonCenter(Coord3D* outCenter)
+{
+	if (!m_poly_curSelectedPolygon || m_poly_curSelectedPolygon->getNumPoints() < 1) {
+		return false;
+	}
+	
+	outCenter->x = 0;
+	outCenter->y = 0;
+	outCenter->z = 0;
+	
+	Int numPoints = m_poly_curSelectedPolygon->getNumPoints();
+	for (Int i = 0; i < numPoints; i++) {
+		const ICoord3D* pt = m_poly_curSelectedPolygon->getPoint(i);
+		outCenter->x += pt->x;
+		outCenter->y += pt->y;
+		outCenter->z += pt->z;
+	}
+	
+	outCenter->x /= numPoints;
+	outCenter->y /= numPoints;
+	outCenter->z /= numPoints;
+	
+	return true;
+}
+
+Bool PolygonTool::getSelectedPointLocation(Coord3D* outLocation)
+{
+	if (!m_poly_curSelectedPolygon || m_poly_dragPointNdx < 0) {
+		return false;
+	}
+	
+	if (m_poly_dragPointNdx >= m_poly_curSelectedPolygon->getNumPoints()) {
+		return false;
+	}
+	
+	const ICoord3D* pt = m_poly_curSelectedPolygon->getPoint(m_poly_dragPointNdx);
+	outLocation->x = (Real)pt->x;
+	outLocation->y = (Real)pt->y;
+	outLocation->z = (Real)pt->z;
+	
+	return true;
+}
+
+void PolygonTool::translateSelectedPolygon(Real dx, Real dy)
+{
+	if (!m_poly_curSelectedPolygon) return;
+	
+	Int numPoints = m_poly_curSelectedPolygon->getNumPoints();
+	for (Int i = 0; i < numPoints; i++) {
+		ICoord3D pt = *m_poly_curSelectedPolygon->getPoint(i);
+		pt.x += (Int)dx;
+		pt.y += (Int)dy;
+		m_poly_curSelectedPolygon->setPoint(pt, i);
+	}
+}
+
+void PolygonTool::translateSelectedPoint(Real dx, Real dy)
+{
+	if (!m_poly_curSelectedPolygon || m_poly_dragPointNdx < 0) return;
+	
+	if (m_poly_dragPointNdx >= m_poly_curSelectedPolygon->getNumPoints()) return;
+	
+	ICoord3D pt = *m_poly_curSelectedPolygon->getPoint(m_poly_dragPointNdx);
+	pt.x += (Int)dx;
+	pt.y += (Int)dy;
+	m_poly_curSelectedPolygon->setPoint(pt, m_poly_dragPointNdx);
+}
+
+void PolygonTool::rotateSelectedPolygon(Real angle, const Coord3D& center)
+{
+	if (!m_poly_curSelectedPolygon) return;
+	
+	Real cosA = cos(angle);
+	Real sinA = sin(angle);
+	
+	Int numPoints = m_poly_curSelectedPolygon->getNumPoints();
+	for (Int i = 0; i < numPoints; i++) {
+		ICoord3D pt = *m_poly_curSelectedPolygon->getPoint(i);
+		Real dx = pt.x - center.x;
+		Real dy = pt.y - center.y;
+		
+		Real newX = center.x + dx * cosA - dy * sinA;
+		Real newY = center.y + dx * sinA + dy * cosA;
+		
+		pt.x = (Int)newX;
+		pt.y = (Int)newY;
+		m_poly_curSelectedPolygon->setPoint(pt, i);
+	}
+}
+
+void PolygonTool::storePolygonStartPositions(void)
+{
+	s_polygonStartPositions.clear();
+	
+	if (!m_poly_curSelectedPolygon) return;
+	
+	Int numPoints = m_poly_curSelectedPolygon->getNumPoints();
+	s_polygonStartPositions.reserve(numPoints);
+	
+	for (Int i = 0; i < numPoints; i++) {
+		s_polygonStartPositions.push_back(*m_poly_curSelectedPolygon->getPoint(i));
+	}
+	
+	if (m_poly_dragPointNdx >= 0 && m_poly_dragPointNdx < numPoints) {
+		s_selectedPointStartPosition = *m_poly_curSelectedPolygon->getPoint(m_poly_dragPointNdx);
+	}
+}
+
+void PolygonTool::setPolygonOffset(Real dx, Real dy)
+{
+	if (!m_poly_curSelectedPolygon) return;
+	if (s_polygonStartPositions.empty()) return;
+	
+	Int numPoints = m_poly_curSelectedPolygon->getNumPoints();
+	Int storedCount = (Int)s_polygonStartPositions.size();
+	
+	for (Int i = 0; i < numPoints && i < storedCount; i++) {
+		ICoord3D pt = s_polygonStartPositions[i];
+		pt.x += (Int)dx;
+		pt.y += (Int)dy;
+		m_poly_curSelectedPolygon->setPoint(pt, i);
+	}
+}
+
+void PolygonTool::setSelectedPointOffset(Real dx, Real dy)
+{
+	if (!m_poly_curSelectedPolygon || m_poly_dragPointNdx < 0) return;
+	if (m_poly_dragPointNdx >= m_poly_curSelectedPolygon->getNumPoints()) return;
+	
+	ICoord3D pt = s_selectedPointStartPosition;
+	pt.x += (Int)dx;
+	pt.y += (Int)dy;
+	m_poly_curSelectedPolygon->setPoint(pt, m_poly_dragPointNdx);
 }
 

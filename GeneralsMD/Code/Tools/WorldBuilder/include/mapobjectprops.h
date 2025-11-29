@@ -84,6 +84,9 @@ protected:
 	WBPopupSliderButton m_heightSlider;
 	WBPopupSliderButton m_angleSlider;
 	WBPopupSliderButton m_scaleSlider;
+	WBPopupSliderButton m_xPosSlider;
+	WBPopupSliderButton m_yPosSlider;
+	WBPopupSliderButton m_snapSlider;
 
 	Int              m_defaultEntryIndex; //< Index in the sound combobox of the entry labelled "default"
 	Bool             m_defaultIsNone; //< The default for this object is no sound
@@ -120,7 +123,9 @@ protected:
 	afx_msg void SetPosition(void);
 	afx_msg void OnScaleOn();
 	afx_msg void OnScaleOff();
-	afx_msg void OnKillfocusMAPOBJECTXYPosition();
+	afx_msg void OnKillfocusXPosition();
+	afx_msg void OnKillfocusYPosition();
+	afx_msg void OnLockZAxisChanged();
 	afx_msg void _PrebuiltUpgradesToDict(void);
 	afx_msg void _HealthToDict(void);
 	afx_msg void _EnabledToDict(void);
@@ -176,6 +181,8 @@ protected:
 	void ShowZOffset(MapObject* pMapObj);
 	void ShowAngle(MapObject* pMapObj);
 	void ShowPosition(MapObject* pMapObj);
+	void SetXPosition(void);
+	void SetYPosition(void);
 	void dictToAttachedSound(void);
 	void dictToCustomize(void);
 	void dictToEnabled(void);

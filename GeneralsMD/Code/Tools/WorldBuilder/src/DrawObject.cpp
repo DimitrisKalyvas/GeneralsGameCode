@@ -2125,45 +2125,32 @@ if (pMapObj->isSelected()) {
 			//if (rinfo.Camera.Cull_Sphere(bounds)) {
 			//	continue;
 			//}
-			Bool doArrow = true;
-			if (pMapObj->getFlag(FLAG_ROAD_FLAGS) || pMapObj->getFlag(FLAG_BRIDGE_FLAGS) || pMapObj->isWaypoint())
-			{
-				doArrow = false;
-			}
-			
-			PointerTool* pointerTool = WbApp()->getPointerTool();
-			Bool skipForGizmo = (pointerTool && pointerTool->isGizmoVisible() && pMapObj->isSelected());
-			if (skipForGizmo) {
-				continue;
-			}
-
 			Bool doDiamond = pMapObj->isWaypoint();
 			if (doDiamond) {
 				if (!m_drawWaypoints) {
 					continue;
 				}
 			}	else {
-				// MLL C&C3
 				if (pMapObj->isSelected()) {
-					if (doArrow && m_drawBoundingBoxes) {
+					if (m_drawBoundingBoxes) {
 						linesToRender = true;
 						updateVBWithBoundingBox(pMapObj, &rinfo.Camera);
 					}
-					if (doArrow && m_drawSightRanges) {
+					if (m_drawSightRanges) {
 						linesToRender = true;
 						updateVBWithSightRange(pMapObj, &rinfo.Camera);
 					}
-					if (doArrow && m_drawWeaponRanges) {
+					if (m_drawWeaponRanges) {
 						linesToRender = true;
 						updateVBWithWeaponRange(pMapObj, &rinfo.Camera);
 					}
-          if (doArrow && m_drawSoundRanges) {
-            linesToRender = true;
-            updateVBWithSoundRanges(pMapObj, &rinfo.Camera);
-          }
+					if (m_drawSoundRanges) {
+						linesToRender = true;
+						updateVBWithSoundRanges(pMapObj, &rinfo.Camera);
+					}
 				}
 
-				if (doArrow && m_drawTestArtHighlight) {
+				if (m_drawTestArtHighlight) {
 					linesToRender = true;
 					updateVBWithTestArtHighlight(pMapObj, &rinfo.Camera);
 				}
@@ -2174,37 +2161,32 @@ if (pMapObj->isSelected()) {
 				if (BuildListTool::isActive()) {
 					continue;
 				}
+				continue;
 			}
 
 			if (count&1) {
 				int setting = pMapObj->getColor();
 
-				if (doArrow) {
-					setting |= (1<<25);
-				}
 				if (doDiamond) {
 					setting |= (1<<26);
 				}
 
 				if (setting != rememberLastSettingVB1)	{
 					rememberLastSettingVB1 = setting;
-					updateVB(m_vertexBufferTile1,pMapObj->getColor(), doArrow, doDiamond);
+					updateVB(m_vertexBufferTile1, pMapObj->getColor(), false, doDiamond);
 				}
 				DX8Wrapper::Set_Vertex_Buffer(m_vertexBufferTile1);
 
 			} else {
 				int setting = pMapObj->getColor();
 
-				if (doArrow) {
-					setting |= (1<<25);
-				}
 				if (doDiamond) {
 					setting |= (1<<26);
 				}
 
 				if (setting != rememberLastSettingVB2) {
 					rememberLastSettingVB2 = setting;
-					updateVB(m_vertexBufferTile2, pMapObj->getColor(), doArrow, doDiamond);
+					updateVB(m_vertexBufferTile2, pMapObj->getColor(), false, doDiamond);
 				}
 				DX8Wrapper::Set_Vertex_Buffer(m_vertexBufferTile2);
 			}
@@ -2220,9 +2202,6 @@ if (pMapObj->isSelected()) {
 			tm.Set_Translation(vec);
 			tm.Set_Rotation(rot);
 			int polyCount = NUM_TRI;
-			if (!pMapObj->isSelected()) {
-				polyCount -= NUM_ARROW_TRI+NUM_SELECT_TRI;
-			}
 
 			DX8Wrapper::Set_Transform(D3DTS_WORLD,tm);
 			if (isTree) {
@@ -2244,8 +2223,15 @@ if (pMapObj->isSelected()) {
 				Bool polySelected = PolygonTool::isSelected(pTrig);
 				if (polySelected && !selected) continue;
 				if (!polySelected && selected) continue;
+				PointerTool* ptrTool = WbApp()->getPointerTool();
+				Bool skipPointOverlay = (ptrTool && ptrTool->isGizmoVisible() && ptrTool->isGizmoForPolygon());
 				for (i=0; i<pTrig->getNumPoints(); i++) {
 					Bool pointSelected = (polySelected && PolygonTool::getSelectedPointNdx()==i);
+					
+					if (skipPointOverlay && pointSelected) {
+						continue;
+					}
+					
 					ICoord3D iLoc = *pTrig->getPoint(i);
 					Coord3D loc;
 					loc.x = iLoc.x;
@@ -2815,4 +2801,8 @@ void DrawObject::renderCameraAxesOverlay(CameraClass* camera)
 	m_lineRenderer->Add_Line(Vector2((Real)cornerX, (Real)cornerY), Vector2((Real)xEndX, (Real)xEndY), 3.0f, 0xFFFF0000);
 	m_lineRenderer->Add_Line(Vector2((Real)cornerX, (Real)cornerY), Vector2((Real)yEndX, (Real)yEndY), 3.0f, 0xFF00FF00);
 	m_lineRenderer->Add_Line(Vector2((Real)cornerX, (Real)cornerY), Vector2((Real)zEndX, (Real)zEndY), 3.0f, 0xFF0000FF);
+	
+	m_cameraAxesLabelX = CPoint(xEndX + (Int)(cosY * 12.0f), xEndY - (Int)(sinY * 12.0f));
+	m_cameraAxesLabelY = CPoint(yEndX + (Int)(-sinY * 12.0f), yEndY - (Int)(cosY * 12.0f));
+	m_cameraAxesLabelZ = CPoint(zEndX, zEndY - 12);
 }

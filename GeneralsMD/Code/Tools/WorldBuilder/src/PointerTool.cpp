@@ -39,6 +39,7 @@
 
 // Static member initialization
 Real PointerTool::s_rotationSnapDegrees = 3.0f;
+Bool PointerTool::s_lockZAxis = true;
 
 //
 // Static helper functions
@@ -103,7 +104,10 @@ PointerTool::PointerTool(void) :
 	m_gizmoAngle(0),
 	m_gizmoVisible(false),
 	m_gizmoRotating(false),
+	m_gizmoIsPolygon(false),
+	m_gizmoPolygonStartCenter({0, 0, 0}),
 	m_gizmoDragStartAngle(0),
+	m_gizmoDragStartZ(0),
 	m_gizmoPrevMouseAngle(0),
 	m_gizmoAccumulatedDelta(0),
 	m_gizmoRotationDelta(0),
@@ -200,8 +204,6 @@ void PointerTool::clearSelection(void) ///< Clears the selected objects selected
 void PointerTool::activate()
 {
 	Tool::activate();
-	m_mouseUpRotate = false;
-	m_mouseUpMove = false;
 	m_hoveredGizmoComponent = GIZMO_NONE;
 	m_activeGizmoComponent = GIZMO_NONE;
 	checkForPropertiesPanel();
@@ -232,27 +234,21 @@ void PointerTool::setCursor(void)
 		return;
 	}
 	if (m_hoveredGizmoComponent != GIZMO_NONE) {
-		if (m_moveCursor == NULL) {
-			m_moveCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_MOVE_POINTER));
+		if (m_hoveredGizmoComponent == GIZMO_ROTATE_Z) {
+			if (m_rotateCursor == NULL) {
+				m_rotateCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_ROTATE));
+			}
+			::SetCursor(m_rotateCursor);
+		} else {
+			if (m_moveCursor == NULL) {
+				m_moveCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_MOVE_POINTER));
+			}
+			::SetCursor(m_moveCursor);
 		}
-		::SetCursor(m_moveCursor);
 		return;
 	}
 	
-	// Fall back to original behavior
-	if (m_mouseUpRotate) {
-		if (m_rotateCursor == NULL) {
-			m_rotateCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_ROTATE));
-		}
-		::SetCursor(m_rotateCursor);
-	} else 	if (m_mouseUpMove) {
-		if (m_moveCursor == NULL) {
-			m_moveCursor = AfxGetApp()->LoadCursor(MAKEINTRESOURCE(IDC_MOVE_POINTER));
-		}
-		::SetCursor(m_moveCursor);
-	} else {
-		Tool::setCursor();
-	}
+	Tool::setCursor();
 }
 
 Bool PointerTool::allowPick(MapObject* pMapObj, WbView* pView)
@@ -304,7 +300,6 @@ void PointerTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 	m_downPt3d = cpt;
 	pView->snapPoint(&m_downPt3d);
 	m_moving = false;
-	m_rotating = false;
 	m_dragSelect = false;
 	Bool shiftKey = (0x8000 & ::GetAsyncKeyState(VK_SHIFT))!=0;
 	Bool ctrlKey = (0x8000 & ::GetAsyncKeyState(VK_CONTROL))!=0;
@@ -314,6 +309,11 @@ void PointerTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 	if (gizmoHit != GIZMO_NONE) {
 		m_activeGizmoComponent = gizmoHit;
 		m_gizmoDragStartPos = cpt;
+		m_gizmoPolygonStartCenter = m_gizmoCenter;
+		
+		if (m_gizmoIsPolygon) {
+			PolygonTool::storePolygonStartPositions();
+		}
 		
 		if (gizmoHit == GIZMO_ROTATE_Z) {
 			Real dx = cpt.x - m_gizmoCenter.x;
@@ -325,6 +325,10 @@ void PointerTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 			m_gizmoObjectStartAngle = m_gizmoAngle;
 			m_gizmoRotationDelta = 0;
 			m_gizmoRotating = true;
+		}
+		
+		if (gizmoHit == GIZMO_MOVE_Z) {
+			m_gizmoDragStartZ = m_gizmoCenter.z;
 		}
 		
 		if (m_modifyUndoable == NULL) {
@@ -442,11 +446,7 @@ void PointerTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 	}
 
 	if (anySelected) {
-		if (m_curObject) {
-			if (!m_gizmoVisible && pView->picked(m_curObject, cpt) == PICK_ARROW) {
-				m_rotating = true;
-			}
-		}	else {
+		if (!m_curObject) {
 			pObj = MapObject::getFirstMapObject();
 			while (pObj) {
 				if (pObj->isSelected()) {
@@ -456,16 +456,12 @@ void PointerTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 				pObj = pObj->getNext();
 			}
 		}
-		if (m_curObject) {
-			if (m_gizmoVisible) {
-				m_curObject = NULL;
-			} else {
-				loc = *m_curObject->getLocation();
-				Coord3D snapLoc = loc;
-				pView->snapPoint(&snapLoc);
-				m_downPt3d.x += (loc.x-snapLoc.x);
-				m_downPt3d.y += (loc.y-snapLoc.y);
-			}
+		if (m_curObject && !m_gizmoVisible) {
+			loc = *m_curObject->getLocation();
+			Coord3D snapLoc = loc;
+			pView->snapPoint(&snapLoc);
+			m_downPt3d.x += (loc.x-snapLoc.x);
+			m_downPt3d.y += (loc.y-snapLoc.y);
 		}
 	}	else {
 		m_dragSelect = true;
@@ -489,64 +485,13 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 		GizmoComponent prevHovered = m_hoveredGizmoComponent;
 		m_hoveredGizmoComponent = pickGizmoComponent(viewPt, pView);
 		
-		// If hovering a gizmo component, skip normal hover checks
-		if (m_hoveredGizmoComponent != GIZMO_NONE) {
-			m_mouseUpRotate = false;
-			m_mouseUpMove = false;
-			
-			// Invalidate view if hover state changed
-			if (prevHovered != m_hoveredGizmoComponent) {
-				CWorldBuilderDoc *pDocLocal = CWorldBuilderDoc::GetActiveDoc();
-				if (pDocLocal) {
-					WbView3d *p3View = pDocLocal->Get3DView();
-					if (p3View) {
-						p3View->Invalidate(false);
-					}
-				}
-			}
-			return;
-		}
-		
-		// Invalidate if we stopped hovering a gizmo component
-		if (prevHovered != GIZMO_NONE) {
+		// Invalidate view if hover state changed
+		if (prevHovered != m_hoveredGizmoComponent) {
 			CWorldBuilderDoc *pDocLocal = CWorldBuilderDoc::GetActiveDoc();
 			if (pDocLocal) {
 				WbView3d *p3View = pDocLocal->Get3DView();
 				if (p3View) {
 					p3View->Invalidate(false);
-				}
-			}
-		}
-		
-		// Skip old hover checks when gizmo is active
-		if (!m_gizmoVisible) {
-			MapObject *pObj = MapObject::getFirstMapObject();
-			m_mouseUpRotate = false;
-			m_mouseUpMove = false;
-			while (pObj) {
-				if (allowPick(pObj, pView)) {
-					TPickedStatus stat = pView->picked(pObj, cpt);
-					if (stat==PICK_ARROW) {
-						m_mouseUpRotate = true;
-						break;
-					}
-					if (stat==PICK_CENTER) {
-						m_mouseUpMove = true;
-						break;
-					}
-				}
-				pObj = pObj->getNext();
-			}
-			if (!m_mouseUpRotate) {
-				pObj = pView->picked3dObjectInView(viewPt);
-				if (allowPick(pObj, pView)) {
-					m_mouseUpMove = true;
-				}
-			}
-			if (pView->isPolygonTriggerVisible() && pickPolygon(cpt, viewPt, pView)) {
-				if (pView->GetPickConstraint() == ES_NONE || pView->GetPickConstraint() == ES_WAYPOINT) {
-					m_mouseUpMove = true;
-					m_mouseUpRotate = false;
 				}
 			}
 		}
@@ -572,7 +517,22 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 	}
 
 	// Handle gizmo dragging
-	if (m_activeGizmoComponent != GIZMO_NONE && m_moving && m_modifyUndoable) {
+	if (m_activeGizmoComponent != GIZMO_NONE && m_moving) {
+		if (m_gizmoIsPolygon) {
+			// Polygon gizmo - lightweight path
+			if (m_activeGizmoComponent == GIZMO_ROTATE_Z) {
+				handleGizmoRotation(viewPt, pView, pDoc);
+			} else {
+				handleGizmoTranslation(m_activeGizmoComponent, viewPt, pView, pDoc);
+			}
+			pView->Invalidate();
+			pView->UpdateWindow();
+			return;
+		}
+		
+		// MapObject gizmo - requires undoable
+		if (!m_modifyUndoable) return;
+		
 		MapObject *curMapObj = MapObject::getFirstMapObject();
 		while (curMapObj) {
 			if (curMapObj->isSelected()) {
@@ -587,7 +547,6 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 			handleGizmoTranslation(m_activeGizmoComponent, viewPt, pView, pDoc);
 		}
 		
-		// Invalidate selected objects after move
 		curMapObj = MapObject::getFirstMapObject();
 		while (curMapObj) {
 			if (curMapObj->isSelected()) {
@@ -595,8 +554,8 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 			}
 			curMapObj = curMapObj->getNext();
 		}
-		
 		updateGizmoCenter();
+		
 		pDoc->updateAllViews();
 		return;
 	}
@@ -604,7 +563,7 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 	if (m_curObject == NULL) {
 		return;
 	}
-	pView->viewToDocCoords(viewPt, &cpt, !m_rotating);
+	pView->viewToDocCoords(viewPt, &cpt, true);
 	if (!m_moving) {
 		// always use view coords (not doc coords) for hysteresis
 		Int dx = viewPt.x-m_downPt2d.x;
@@ -619,31 +578,25 @@ void PointerTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 	MapObject *curMapObj = MapObject::getFirstMapObject();
 	while (curMapObj) {
 		if (curMapObj->isSelected()) {
-			//pDoc->invalObject(curMapObj);			// invaling in all views can be too slow.
 			pView->invalObjectInView(curMapObj);
 		}
 		curMapObj = curMapObj->getNext();
 	}
 
-	if (m_rotating) {
-		Coord3D center = *m_curObject->getLocation();
-		m_modifyUndoable->RotateTo(ObjectTool::calcAngle(center, cpt, pView));
-	} else {
-		pView->snapPoint(&cpt);
-		Real xOffset = (cpt.x-m_downPt3d.x);
-		Real yOffset = (cpt.y-m_downPt3d.y);
-		m_modifyUndoable->SetOffset(xOffset, yOffset);
-	}
+	pView->snapPoint(&cpt);
+	Real xOffset = (cpt.x-m_downPt3d.x);
+	Real yOffset = (cpt.y-m_downPt3d.y);
+	m_modifyUndoable->SetOffset(xOffset, yOffset);
 
 	curMapObj = MapObject::getFirstMapObject();
 	while (curMapObj) {
 		if (curMapObj->isSelected()) {
-			//pDoc->invalObject(curMapObj);			// invaling in all views can be too slow.
 			pView->invalObjectInView(curMapObj);
 		}
 		curMapObj = curMapObj->getNext();
 	}
 
+	updateGizmoCenter();
 	pDoc->updateAllViews();
 
 }
@@ -750,8 +703,26 @@ void PointerTool::updateGizmoCenter(void)
 		m_gizmoCenter = center;
 		m_gizmoAngle = firstAngle;
 		m_gizmoVisible = true;
+		m_gizmoIsPolygon = false;
 	} else {
-		m_gizmoVisible = false;
+		Coord3D pointLoc;
+		if (PolygonTool::getSelectedPointLocation(&pointLoc)) {
+			m_gizmoCenter = pointLoc;
+			m_gizmoAngle = 0;
+			m_gizmoVisible = true;
+			m_gizmoIsPolygon = true;
+		} else {
+			Coord3D polyCenter;
+			if (PolygonTool::getSelectedPolygonCenter(&polyCenter)) {
+				m_gizmoCenter = polyCenter;
+				m_gizmoAngle = 0;
+				m_gizmoVisible = true;
+				m_gizmoIsPolygon = true;
+			} else {
+				m_gizmoVisible = false;
+				m_gizmoIsPolygon = false;
+			}
+		}
 	}
 }
 
@@ -889,6 +860,7 @@ void PointerTool::handleGizmoTranslation(GizmoComponent axis, CPoint viewPt, WbV
 	
 	Real xOffset = 0;
 	Real yOffset = 0;
+	Real zOffset = 0;
 	
 	switch (axis) {
 		case GIZMO_MOVE_X: {
@@ -906,7 +878,14 @@ void PointerTool::handleGizmoTranslation(GizmoComponent axis, CPoint viewPt, WbV
 		}
 			
 		case GIZMO_MOVE_Z:
-			return;
+			if (s_lockZAxis) {
+				return;
+			}
+			{
+				Real sensitivity = 0.5f;
+				zOffset = m_gizmoDragStartZ + (dy * sensitivity);
+			}
+			break;
 			
 		case GIZMO_MOVE_XY:
 			xOffset = dx;
@@ -917,15 +896,35 @@ void PointerTool::handleGizmoTranslation(GizmoComponent axis, CPoint viewPt, WbV
 			return;
 	}
 	
-	Coord3D snapped = m_gizmoCenter;
+	Coord3D snapped = m_gizmoPolygonStartCenter;
 	snapped.x += xOffset;
 	snapped.y += yOffset;
 	pView->snapPoint(&snapped);
 	
-	xOffset = snapped.x - m_gizmoCenter.x;
-	yOffset = snapped.y - m_gizmoCenter.y;
+	Real snappedXOffset = snapped.x - m_gizmoPolygonStartCenter.x;
+	Real snappedYOffset = snapped.y - m_gizmoPolygonStartCenter.y;
 	
-	m_modifyUndoable->SetOffset(xOffset, yOffset);
+	if (m_gizmoIsPolygon) {
+		if (axis != GIZMO_MOVE_Z) {
+			if (PolygonTool::hasSelectedPoint()) {
+				PolygonTool::setSelectedPointOffset(snappedXOffset, snappedYOffset);
+				m_gizmoCenter.x = m_gizmoPolygonStartCenter.x + snappedXOffset;
+				m_gizmoCenter.y = m_gizmoPolygonStartCenter.y + snappedYOffset;
+			} else {
+				PolygonTool::setPolygonOffset(snappedXOffset, snappedYOffset);
+				m_gizmoCenter.x = m_gizmoPolygonStartCenter.x + snappedXOffset;
+				m_gizmoCenter.y = m_gizmoPolygonStartCenter.y + snappedYOffset;
+			}
+		}
+	} else {
+		xOffset = snappedXOffset;
+		yOffset = snappedYOffset;
+		if (axis == GIZMO_MOVE_Z) {
+			m_modifyUndoable->SetZOffset(zOffset);
+		} else {
+			m_modifyUndoable->SetOffset(xOffset, yOffset);
+		}
+	}
 }
 
 void PointerTool::handleGizmoRotation(CPoint viewPt, WbView* pView, CWorldBuilderDoc* pDoc)
@@ -962,13 +961,19 @@ void PointerTool::handleGizmoRotation(CPoint viewPt, WbView* pView, CWorldBuilde
 	
 	m_gizmoRotationDelta = newAngle - m_gizmoObjectStartAngle;
 	
-	MapObject *pObj = MapObject::getFirstMapObject();
-	while (pObj) {
-		if (pObj->isSelected()) {
-			m_modifyUndoable->RotateTo(newAngle);
-			break;
+	if (m_gizmoIsPolygon) {
+		Real rotationDelta = scaledDelta - m_gizmoPrevMouseAngle;
+		PolygonTool::rotateSelectedPolygon(frameDelta * 1.5f, m_gizmoCenter);
+		updateGizmoCenter();
+	} else {
+		MapObject *pObj = MapObject::getFirstMapObject();
+		while (pObj) {
+			if (pObj->isSelected()) {
+				m_modifyUndoable->RotateTo(newAngle);
+				break;
+			}
+			pObj = pObj->getNext();
 		}
-		pObj = pObj->getNext();
 	}
 	
 	Real deltaDegrees = m_gizmoRotationDelta * 180.0f / PI;
