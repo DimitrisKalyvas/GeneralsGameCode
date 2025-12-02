@@ -683,7 +683,7 @@ void PointerTool::updateGizmoScale(WbView* pView)
 		WbView3d *p3View = pDoc->Get3DView();
 		if (p3View) {
 			Real zoom = p3View->getCurrentZoom();
-			m_gizmoScale = max(0.5f, min(3.0f, zoom / 200.0f));
+			m_gizmoScale = clamp(zoom / 200.0f, 0.5f, 3.0f);
 		}
 	}
 }
@@ -886,10 +886,7 @@ void PointerTool::handleGizmoRotation(CPoint viewPt, WbView* pView, CWorldBuilde
 	
 	// Calculate incremental delta from previous mouse position (not from start)
 	// This avoids the jump when atan2 wraps from +π to -π
-	Real frameDelta = currentMouseAngle - m_gizmoPrevMouseAngle;
-	
-	if (frameDelta > PI) frameDelta -= 2.0f * PI;
-	if (frameDelta < -PI) frameDelta += 2.0f * PI;
+	Real frameDelta = normalizeAngle(currentMouseAngle - m_gizmoPrevMouseAngle);
 	
 	m_gizmoAccumulatedDelta += frameDelta;
 	m_gizmoPrevMouseAngle = currentMouseAngle;

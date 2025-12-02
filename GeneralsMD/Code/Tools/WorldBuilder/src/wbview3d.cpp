@@ -76,6 +76,7 @@
 #include "BrushTool.h"
 #include "Common/MapObject.h"
 #include "Common/GlobalData.h"
+#include "Common/GameCommon.h"
 #include "ShadowOptions.h"
 #include "WorldBuilder.h"
 #include "wbview3d.h"
@@ -1796,12 +1797,7 @@ Bool WbView3d::viewToDocCoords(CPoint curPt, Coord3D *newPt, Bool constrain)
 			}
 		}
 #else
-		if (m_cameraAngle > PI) {
-			m_cameraAngle -= 2*PI;
-		}
-		if (m_cameraAngle < -PI) {
-			m_cameraAngle += 2*PI;
-		}
+		m_cameraAngle = normalizeAngle(m_cameraAngle);
 		Bool flip = false;
 		// If we are looking sideways, flip the locks.
 		if (PI/4<m_cameraAngle && m_cameraAngle < 3*PI/4) {

@@ -69,7 +69,7 @@ Real ObjectTool::calcAngle(Coord3D downPt, Coord3D curPt, WbView* pView)
 		angle = asin(	((double)dy) / dist);
 		if (dx<0) angle = PI-angle;
 	}
-	if (angle > PI) angle -= 2*PI;
+	angle = normalizeAngle(angle);
 #ifdef RTS_DEBUG
 	CString buf;
 	buf.Format("Angle %f rad, %d degrees\n", angle, (int)(angle*180/PI));
