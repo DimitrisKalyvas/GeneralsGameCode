@@ -689,9 +689,21 @@ void PointerTool::updateGizmoScale(WbView* pView)
 }
 
 static const Int GIZMO_AXIS_LENGTH = 40;
-static const Int GIZMO_HANDLE_SIZE = 20;
 static const Int GIZMO_RING_RADIUS = 35;
-static const Int GIZMO_PICK_TOLERANCE = 18;
+
+// Helper to compute rotated quad corners
+static void computeRotatedQuad(const Coord3D& center, Real scaledCos, Real scaledSin, Coord3D out[4])
+{
+	out[0] = out[1] = out[2] = out[3] = center;
+	out[0].x += scaledCos - scaledSin; out[0].y += scaledSin + scaledCos;
+	out[1].x += -scaledCos - scaledSin; out[1].y += -scaledSin + scaledCos;
+	out[2].x += -scaledCos + scaledSin; out[2].y += -scaledSin - scaledCos;
+	out[3].x += scaledCos + scaledSin; out[3].y += scaledSin - scaledCos;
+}
+
+// Helper: distance between two points
+static inline Real pointDist(Real dx, Real dy) { return sqrt(dx*dx + dy*dy); }
+static inline Real pointDist(CPoint a, CPoint b) { return pointDist((Real)(b.x-a.x), (Real)(b.y-a.y)); }
 
 GizmoComponent PointerTool::pickGizmoComponent(CPoint viewPt, WbView* pView)
 {
@@ -711,23 +723,19 @@ GizmoComponent PointerTool::pickGizmoComponent(CPoint viewPt, WbView* pView)
 	testEnd.x += scale;
 	CPoint testPt;
 	pView->docToViewCoords(testEnd, &testPt);
-	Real screenAxisLen = sqrt((Real)(testPt.x - centerPt.x)*(testPt.x - centerPt.x) + 
-	                          (Real)(testPt.y - centerPt.y)*(testPt.y - centerPt.y));
-	Int tolerance = max(12, (Int)(screenAxisLen * 0.3f));
+	Real screenAxisLen = pointDist(centerPt, testPt);
+	Int tolerance = max(8, (Int)(screenAxisLen * 0.15f));
 	
+	// Distance to line segment - returns large value if click is beyond the segment ends
 	auto distToSegment = [](CPoint p, CPoint a, CPoint b) -> Real {
-		Real dx = (Real)(b.x - a.x);
-		Real dy = (Real)(b.y - a.y);
+		Real dx = (Real)(b.x - a.x), dy = (Real)(b.y - a.y);
 		Real lengthSq = dx*dx + dy*dy;
-		if (lengthSq < 0.001f) return sqrt((Real)(p.x-a.x)*(p.x-a.x) + (Real)(p.y-a.y)*(p.y-a.y));
-		
+		if (lengthSq < 0.001f) return pointDist((Real)(p.x-a.x), (Real)(p.y-a.y));
 		Real t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq;
-		if (t < 0) t = 0;
-		if (t > 1) t = 1;
-		
-		Real projX = a.x + t * dx;
-		Real projY = a.y + t * dy;
-		return sqrt((p.x - projX)*(p.x - projX) + (p.y - projY)*(p.y - projY));
+		// Reject clicks beyond the segment (only allow small extension at ends)
+		if (t < -0.1f || t > 1.1f) return 9999.0f;
+		t = clamp(t, 0.0f, 1.0f);
+		return pointDist(p.x - (a.x + t*dx), p.y - (a.y + t*dy));
 	};
 	
 	if (m_gizmoMode == GIZMO_MODE_ROTATE) {
@@ -735,14 +743,9 @@ GizmoComponent PointerTool::pickGizmoComponent(CPoint viewPt, WbView* pView)
 		ringEdge.x += GIZMO_RING_RADIUS * m_gizmoScale;
 		CPoint ringPt;
 		pView->docToViewCoords(ringEdge, &ringPt);
-		Real screenRingRadius = sqrt((Real)(ringPt.x - centerPt.x)*(ringPt.x - centerPt.x) + 
-		                             (Real)(ringPt.y - centerPt.y)*(ringPt.y - centerPt.y));
-		
-		Real dx = (Real)(viewPt.x - centerPt.x);
-		Real dy = (Real)(viewPt.y - centerPt.y);
-		Real dist = sqrt(dx*dx + dy*dy);
-		
-		Real ringTolerance = max((Real)tolerance, screenRingRadius * 0.35f);
+		Real screenRingRadius = pointDist(centerPt, ringPt);
+		Real dist = pointDist(centerPt, viewPt);
+		Real ringTolerance = max((Real)tolerance, screenRingRadius * 0.2f);
 		if (fabs(dist - screenRingRadius) < ringTolerance) {
 			return GIZMO_ROTATE_Z;
 		}
@@ -773,24 +776,22 @@ GizmoComponent PointerTool::pickGizmoComponent(CPoint viewPt, WbView* pView)
 		if (distToSegment(viewPt, centerPt, xPt) < tolerance) return GIZMO_MOVE_X;
 		if (distToSegment(viewPt, centerPt, yPt) < tolerance) return GIZMO_MOVE_Y;
 		
+		// XY plane hit test
 		Real planeSize = 20.0f * m_gizmoScale;
-		Real pCos = planeSize * cosA;
-		Real pSin = planeSize * sinA;
-		Coord3D p1 = gizmoWorldPos; p1.x += pCos - pSin; p1.y += pSin + pCos;
-		Coord3D p2 = gizmoWorldPos; p2.x += -pCos - pSin; p2.y += -pSin + pCos;
-		Coord3D p3 = gizmoWorldPos; p3.x += -pCos + pSin; p3.y += -pSin - pCos;
-		Coord3D p4 = gizmoWorldPos; p4.x += pCos + pSin; p4.y += pSin - pCos;
+		Coord3D p[4];
+		computeRotatedQuad(gizmoWorldPos, planeSize * cosA, planeSize * sinA, p);
 		
-		CPoint sp1, sp2, sp3, sp4;
-		if (pView->docToViewCoords(p1, &sp1) && pView->docToViewCoords(p2, &sp2) &&
-		    pView->docToViewCoords(p3, &sp3) && pView->docToViewCoords(p4, &sp4)) {
+		CPoint sp[4];
+		if (pView->docToViewCoords(p[0], &sp[0]) && pView->docToViewCoords(p[1], &sp[1]) &&
+		    pView->docToViewCoords(p[2], &sp[2]) && pView->docToViewCoords(p[3], &sp[3])) {
 			auto cross = [](CPoint o, CPoint a, CPoint b) -> Real {
 				return (Real)(a.x - o.x) * (b.y - o.y) - (Real)(a.y - o.y) * (b.x - o.x);
 			};
-			Bool inside = (cross(sp1, sp2, viewPt) >= 0) == (cross(sp2, sp3, viewPt) >= 0) &&
-			              (cross(sp2, sp3, viewPt) >= 0) == (cross(sp3, sp4, viewPt) >= 0) &&
-			              (cross(sp3, sp4, viewPt) >= 0) == (cross(sp4, sp1, viewPt) >= 0);
-			if (inside) return GIZMO_MOVE_XY;
+			Real c0 = cross(sp[0], sp[1], viewPt), c1 = cross(sp[1], sp[2], viewPt);
+			Real c2 = cross(sp[2], sp[3], viewPt), c3 = cross(sp[3], sp[0], viewPt);
+			if ((c0 >= 0) == (c1 >= 0) && (c1 >= 0) == (c2 >= 0) && (c2 >= 0) == (c3 >= 0)) {
+				return GIZMO_MOVE_XY;
+			}
 		}
 	}
 	
@@ -849,7 +850,12 @@ void PointerTool::handleGizmoTranslation(GizmoComponent axis, CPoint viewPt, WbV
 	Coord3D snapped = m_gizmoPolygonStartCenter;
 	snapped.x += xOffset;
 	snapped.y += yOffset;
-	pView->snapPoint(&snapped);
+	
+	// Shift bypasses grid snapping for free positioning
+	Bool shiftKey = (0x8000 & ::GetAsyncKeyState(VK_SHIFT)) != 0;
+	if (!shiftKey) {
+		pView->snapPoint(&snapped);
+	}
 	
 	Real snappedXOffset = snapped.x - m_gizmoPolygonStartCenter.x;
 	Real snappedYOffset = snapped.y - m_gizmoPolygonStartCenter.y;

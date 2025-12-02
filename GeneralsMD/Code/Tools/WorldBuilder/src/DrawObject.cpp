@@ -2519,20 +2519,24 @@ static void drawGizmoArrow(Render2DClass* renderer, const ICoord2D& start, const
 	Vector2 endV(end.x, end.y);
 	renderer->Add_Line(startV, endV, width, color);
 	
-	Vector2 dir(end.x - start.x, end.y - start.y);
-	Real len = sqrt(dir.X * dir.X + dir.Y * dir.Y);
+	Real dx = end.x - start.x, dy = end.y - start.y;
+	Real len = sqrt(dx * dx + dy * dy);
 	if (len > 0) {
-		dir.X /= len;
-		dir.Y /= len;
-		Real arrowSize = 10.0f;
-		Vector2 tip(end.x, end.y);
-		Vector2 left(end.x - dir.X * arrowSize - dir.Y * arrowSize * 0.5f,
-		             end.y - dir.Y * arrowSize + dir.X * arrowSize * 0.5f);
-		Vector2 right(end.x - dir.X * arrowSize + dir.Y * arrowSize * 0.5f,
-		              end.y - dir.Y * arrowSize - dir.X * arrowSize * 0.5f);
-		renderer->Add_Line(tip, left, width, color);
-		renderer->Add_Line(tip, right, width, color);
+		dx /= len; dy /= len;
+		Real as = 10.0f; // arrow size
+		renderer->Add_Line(endV, Vector2(end.x - dx*as - dy*as*0.5f, end.y - dy*as + dx*as*0.5f), width, color);
+		renderer->Add_Line(endV, Vector2(end.x - dx*as + dy*as*0.5f, end.y - dy*as - dx*as*0.5f), width, color);
 	}
+}
+
+// Helper to compute rotated quad corners: signs are [++, -+, --, +-] for corners 0-3
+static void computeRotatedQuad(const Coord3D& center, Real scaledCos, Real scaledSin, Coord3D out[4])
+{
+	out[0] = out[1] = out[2] = out[3] = center;
+	out[0].x += scaledCos - scaledSin; out[0].y += scaledSin + scaledCos;
+	out[1].x += -scaledCos - scaledSin; out[1].y += -scaledSin + scaledCos;
+	out[2].x += -scaledCos + scaledSin; out[2].y += -scaledSin - scaledCos;
+	out[3].x += scaledCos + scaledSin; out[3].y += scaledSin - scaledCos;
 }
 
 void DrawObject::renderGizmo(CameraClass* camera)
@@ -2603,56 +2607,32 @@ void DrawObject::renderGizmo(CameraClass* camera)
 			drawGizmoArrow(m_lineRenderer, centerScreen, zScreen, w, colorZ);
 		}
 		
-		// XY plane indicator (small square at center)
-		Real squareSize = 8.0f * scale;
-		Real sqCos = squareSize * cosA;
-		Real sqSin = squareSize * sinA;
-		Coord3D sq[4] = {gizmoPos, gizmoPos, gizmoPos, gizmoPos};
-		sq[0].x += sqCos - sqSin; sq[0].y += sqSin + sqCos;
-		sq[1].x += -sqCos - sqSin; sq[1].y += -sqSin + sqCos;
-		sq[2].x += -sqCos + sqSin; sq[2].y += -sqSin - sqCos;
-		sq[3].x += sqCos + sqSin; sq[3].y += sqSin - sqCos;
-		
-		ICoord2D s[4];
-		if (worldToScreen(&sq[0], &s[0], camera) && worldToScreen(&sq[1], &s[1], camera) &&
-		    worldToScreen(&sq[2], &s[2], camera) && worldToScreen(&sq[3], &s[3], camera)) {
-			Real w = (hovered == GIZMO_MOVE_XY) ? highlightWidth : lineWidth;
-			for (int i = 0; i < 4; i++) {
-				m_lineRenderer->Add_Line(Vector2(s[i].x, s[i].y), Vector2(s[(i+1)%4].x, s[(i+1)%4].y), w, colorXY);
-			}
-		}
-		
-		// XY plane fill
+		// XY plane with grid fill
 		Real planeSize = 20.0f * scale;
-		Real pCos = planeSize * cosA;
-		Real pSin = planeSize * sinA;
-		Coord3D p[4] = {gizmoPos, gizmoPos, gizmoPos, gizmoPos};
-		p[0].x += pCos - pSin; p[0].y += pSin + pCos;
-		p[1].x += -pCos - pSin; p[1].y += -pSin + pCos;
-		p[2].x += -pCos + pSin; p[2].y += -pSin - pCos;
-		p[3].x += pCos + pSin; p[3].y += pSin - pCos;
+		Coord3D p[4];
+		computeRotatedQuad(gizmoPos, planeSize * cosA, planeSize * sinA, p);
 		
 		ICoord2D sp[4];
 		if (worldToScreen(&p[0], &sp[0], camera) && worldToScreen(&p[1], &sp[1], camera) &&
 		    worldToScreen(&p[2], &sp[2], camera) && worldToScreen(&p[3], &sp[3], camera)) {
-			unsigned long planeColor = (hovered == GIZMO_MOVE_XY) ? 0xA0FFFF00 : 0x50FFFF00;
-			unsigned long borderColor = (hovered == GIZMO_MOVE_XY) ? 0xFFFFFF00 : 0x80FFFF00;
-			Real planeWidth = (hovered == GIZMO_MOVE_XY) ? 3.0f : 2.0f;
+			Bool highlight = (hovered == GIZMO_MOVE_XY);
+			unsigned long planeColor = highlight ? 0xA0FFFF00 : 0x50FFFF00;
+			Real planeWidth = highlight ? 3.0f : 2.0f;
 			
-			// Grid fill
+			// Grid fill + border in one pass
 			for (int i = 0; i <= 8; i++) {
 				Real t = i / 8.0f;
-				Vector2 a((1-t)*sp[0].x + t*sp[1].x, (1-t)*sp[0].y + t*sp[1].y);
-				Vector2 b((1-t)*sp[3].x + t*sp[2].x, (1-t)*sp[3].y + t*sp[2].y);
-				m_lineRenderer->Add_Line(a, b, planeWidth, planeColor);
-				Vector2 c((1-t)*sp[0].x + t*sp[3].x, (1-t)*sp[0].y + t*sp[3].y);
-				Vector2 d((1-t)*sp[1].x + t*sp[2].x, (1-t)*sp[1].y + t*sp[2].y);
-				m_lineRenderer->Add_Line(c, d, planeWidth, planeColor);
+				m_lineRenderer->Add_Line(
+					Vector2((1-t)*sp[0].x + t*sp[1].x, (1-t)*sp[0].y + t*sp[1].y),
+					Vector2((1-t)*sp[3].x + t*sp[2].x, (1-t)*sp[3].y + t*sp[2].y), planeWidth, planeColor);
+				m_lineRenderer->Add_Line(
+					Vector2((1-t)*sp[0].x + t*sp[3].x, (1-t)*sp[0].y + t*sp[3].y),
+					Vector2((1-t)*sp[1].x + t*sp[2].x, (1-t)*sp[1].y + t*sp[2].y), planeWidth, planeColor);
 			}
-			
 			// Border
+			Real w = highlight ? highlightWidth : lineWidth;
 			for (int i = 0; i < 4; i++) {
-				m_lineRenderer->Add_Line(Vector2(sp[i].x, sp[i].y), Vector2(sp[(i+1)%4].x, sp[(i+1)%4].y), 2.0f, borderColor);
+				m_lineRenderer->Add_Line(Vector2(sp[i].x, sp[i].y), Vector2(sp[(i+1)%4].x, sp[(i+1)%4].y), w, colorXY);
 			}
 		}
 	}
